@@ -8,11 +8,7 @@ type LockSet struct {
 	YMax  uint8
 }
 
-func New() LockSet {
-	return LockSet{}
-}
-
-func (l *LockSet) AddLock(idx uint, x uint, y uint) {
+func (l *LockSet) AddLock(idx int, x int, y int) {
 	val := uint64(1) << idx
 	l.Locks = l.Locks | val
 	l.XMax = max(uint8(x), l.XMax)
@@ -21,7 +17,12 @@ func (l *LockSet) AddLock(idx uint, x uint, y uint) {
 	l.YMin = min(uint8(y), l.YMin)
 }
 
-func (l LockSet) AlreadyLocked(idx uint) bool {
+func (l LockSet) AlreadyLocked(idx int) bool {
 	val := uint64(1) << idx
 	return l.Locks&val > 0
+}
+
+type QuadLock struct {
+	LockIndexes [4]int
+	Len         int
 }

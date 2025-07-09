@@ -57,4 +57,5 @@ CREATE TABLE worlds (
   cleared BOOLEAN DEFAULT FALSE NOT NULL,
   participants BIGINT DEFAULT 0 NOT NULL,
   total_score BIGINT DEFAULT 0 NOT NULL
+  tile_state BYTEA
 );

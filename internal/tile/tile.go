@@ -3,32 +3,33 @@ package tile
 type Tile uint8
 
 const (
-	NEARBY_MASK  uint8 = 15
-	NEARBY_CLEAR uint8 = 240
-	MINE_MASK    uint8 = 16
-	VIZ_MASK     uint8 = 96
-	VIZ_CLEAR    uint8 = 159
-	VIZ_OPAQUE   uint8 = 0
-	VIZ_FLAG     uint8 = 32
-	VIZ_SWEPT    uint8 = 64
-	VIZ_BOMB     uint8 = 96
-	LOCK_MASK    uint8 = 128
-	LOCK_CLEAR   uint8 = 127
+	NEARBY_MASK  uint8 = 0b0_00_0_1111
+	NEARBY_CLEAR uint8 = 0b1_11_1_0000
+	MINE_MASK    uint8 = 0b0_00_1_0000
+	VIZ_MASK     uint8 = 0b0_11_0_0000
+	VIZ_CLEAR    uint8 = 0b1_00_1_1111
+	VIZ_OPAQUE   uint8 = 0b0_00_0_0000
+	VIZ_FLAG     uint8 = 0b0_01_0_0000
+	VIZ_EMPTY    uint8 = 0b0_10_0_0000
+	VIZ_BOMB     uint8 = 0b0_11_0_0000
+	VIZ_SWEPT    uint8 = 0b0_10_0_0000
 
-	ICON_0 uint8 = 0
-	ICON_1 uint8 = 1
-	ICON_2 uint8 = 2
-	ICON_3 uint8 = 3
-	ICON_4 uint8 = 4
-	ICON_5 uint8 = 5
-	ICON_6 uint8 = 6
-	ICON_7 uint8 = 7
-	ICON_8 uint8 = 8
-	// 9-15 reserved
-
-	ICON_OPAQUE uint8 = 16
-	ICON_FLAG   uint8 = 17
-	ICON_BOMB   uint8 = 18
+	ICON_CODE_0      uint8 = 0
+	ICON_CODE_1      uint8 = 1
+	ICON_CODE_2      uint8 = 2
+	ICON_CODE_3      uint8 = 3
+	ICON_CODE_4      uint8 = 4
+	ICON_CODE_5      uint8 = 5
+	ICON_CODE_6      uint8 = 6
+	ICON_CODE_7      uint8 = 7
+	ICON_CODE_8      uint8 = 8
+	ICON_CODE_9      uint8 = 9
+	ICON_CODE_10     uint8 = 10
+	ICON_CODE_11     uint8 = 11
+	ICON_CODE_12     uint8 = 12
+	ICON_CODE_BOMB   uint8 = 13
+	ICON_CODE_FLAG   uint8 = 14
+	ICON_CODE_OPAQUE uint8 = 15
 )
 
 func (t Tile) GetNearby() uint8 {
@@ -53,26 +54,19 @@ func (t *Tile) SetViz(viz uint8) {
 	*t = Tile(uint8(*t) & VIZ_CLEAR)
 	*t = Tile(uint8(*t) | viz)
 }
-
-func (t Tile) IsLocked() bool {
-	return uint8(t)&LOCK_MASK == LOCK_MASK
-}
-func (t *Tile) Lock() {
-	*t = Tile(uint8(*t) | LOCK_MASK)
-}
-func (t *Tile) Unlock() {
-	*t = Tile(uint8(*t) & LOCK_CLEAR)
+func (t Tile) IsSwept() bool {
+	return uint8(t)&VIZ_MASK == VIZ_SWEPT
 }
 
 func (t Tile) GetIcon() uint8 {
 	viz := t.GetViz()
 	switch viz {
 	case VIZ_OPAQUE:
-		return ICON_OPAQUE
+		return ICON_CODE_OPAQUE
 	case VIZ_FLAG:
-		return ICON_FLAG
+		return ICON_CODE_FLAG
 	case VIZ_BOMB:
-		return ICON_BOMB
+		return ICON_CODE_BOMB
 	default:
 		return t.GetNearby()
 	}
