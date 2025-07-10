@@ -12,7 +12,6 @@ const (
 	VIZ_FLAG     uint8 = 0b0_01_0_0000
 	VIZ_EMPTY    uint8 = 0b0_10_0_0000
 	VIZ_BOMB     uint8 = 0b0_11_0_0000
-	VIZ_SWEPT    uint8 = 0b0_10_0_0000
 
 	ICON_CODE_0      uint8 = 0
 	ICON_CODE_1      uint8 = 1
@@ -39,6 +38,12 @@ func (t *Tile) SetNearby(near uint8) {
 	*t = Tile(uint8(*t) & NEARBY_CLEAR)
 	*t = Tile(uint8(*t) | near)
 }
+func (t *Tile) IncrNearbyMineCount() {
+	*t = Tile(uint8(*t) + 1)
+}
+func (t *Tile) DecrNearbyMineCount() {
+	*t = Tile(uint8(*t) - 1)
+}
 
 func (t Tile) IsMine() bool {
 	return uint8(t)&MINE_MASK == MINE_MASK
@@ -50,12 +55,23 @@ func (t *Tile) SetMine() {
 func (t Tile) GetViz() uint8 {
 	return uint8(t) & VIZ_MASK
 }
-func (t *Tile) SetViz(viz uint8) {
-	*t = Tile(uint8(*t) & VIZ_CLEAR)
-	*t = Tile(uint8(*t) | viz)
-}
 func (t Tile) IsSwept() bool {
-	return uint8(t)&VIZ_MASK == VIZ_SWEPT
+	return uint8(t)&VIZ_EMPTY == VIZ_EMPTY
+}
+func (t *Tile) SetVizOpaque() {
+	*t = Tile(uint8(*t) & VIZ_CLEAR)
+}
+func (t *Tile) SetVizFlag() {
+	*t = Tile(uint8(*t) & VIZ_CLEAR)
+	*t = Tile(uint8(*t) | VIZ_FLAG)
+}
+func (t *Tile) SetVizSweptEmpty() {
+	*t = Tile(uint8(*t) & VIZ_CLEAR)
+	*t = Tile(uint8(*t) | VIZ_EMPTY)
+}
+func (t *Tile) SetVizSweptBomb() {
+	*t = Tile(uint8(*t) & VIZ_CLEAR)
+	*t = Tile(uint8(*t) | VIZ_BOMB)
 }
 
 func (t Tile) GetIcon() uint8 {

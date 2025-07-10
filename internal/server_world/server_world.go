@@ -5,13 +5,10 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
-	"github.com/gabe-lee/OurSweeper/internal/ansi"
 	"github.com/gabe-lee/OurSweeper/internal/lockset"
 	"github.com/gabe-lee/OurSweeper/internal/sweep_result"
 	"github.com/gabe-lee/OurSweeper/internal/tile"
@@ -22,6 +19,8 @@ import (
 const (
 	WIDTH          int = 64
 	HEIGHT         int = 64
+	MAX_X          int = WIDTH - 1
+	MAX_Y          int = HEIGHT - 1
 	HALF_WIDTH     int = WIDTH / 2
 	HALF_HEIGHT    int = WIDTH / 2
 	TILES          int = WIDTH * HEIGHT
@@ -42,20 +41,6 @@ const (
 
 	CENTER_X float64 = float64(HALF_WIDTH)
 	CENTER_Y float64 = float64(HALF_HEIGHT)
-
-	ICON_0      = " "
-	ICON_1      = ansi.FG_BLU + "1" + ansi.CLEAR
-	ICON_2      = ansi.FG_CYA + "2" + ansi.CLEAR
-	ICON_3      = ansi.FG_GRN + "3" + ansi.CLEAR
-	ICON_4      = ansi.FG_YEL + "4" + ansi.CLEAR
-	ICON_5      = ansi.FG_RED + "5" + ansi.CLEAR
-	ICON_6      = ansi.FG_MAG + "6" + ansi.CLEAR
-	ICON_7      = ansi.FG_WHT + "7" + ansi.CLEAR
-	ICON_8      = ansi.FG_BLK + "8" + ansi.CLEAR
-	ICON_BOMB   = ansi.INV_RED + "X" + ansi.CLEAR
-	ICON_SKULL  = ansi.FG_RED + "💀" + ansi.CLEAR
-	ICON_FLAG   = "█"
-	ICON_OPAQUE = "▒"
 
 	MAX_TILE_CASCADE int = 36
 
@@ -199,6 +184,12 @@ func GetIndex(x int, y int) int {
 	return (y << TY_SHIFT) | x
 }
 
+func GetCoords(index int) (x, y int) {
+	x = index & MAX_X
+	y = index >> TY_SHIFT
+	return
+}
+
 func GetLockIndex(xl int, yl int) int {
 	return (yl << LY_SHIFT) | xl
 }
@@ -261,18 +252,18 @@ func (w *World) ReleaseQuadLock(locks lockset.QuadLock) {
 	}
 }
 
-func (w *World) TryLockTile(set *lockset.LockSet, x, y int) bool {
-	lockX, lockY := tileCoordToLockCoord(x, y)
-	lockIdx := GetLockIndex(lockX, lockY)
-	if set.AlreadyLocked(lockIdx) {
-		return true
-	}
-	didLock := w.Locks[lockIdx].TryLock()
-	if didLock {
-		set.AddLock(lockIdx, lockX, lockY)
-	}
-	return didLock
-}
+// func (w *World) TryLockTile(set *lockset.LockSet, x, y int) bool {
+// 	lockX, lockY := tileCoordToLockCoord(x, y)
+// 	lockIdx := GetLockIndex(lockX, lockY)
+// 	if set.AlreadyLocked(lockIdx) {
+// 		return true
+// 	}
+// 	didLock := w.Locks[lockIdx].TryLock()
+// 	if didLock {
+// 		set.AddLock(lockIdx, lockX, lockY)
+// 	}
+// 	return didLock
+// }
 
 // func (w *World) LockTile(set *lockset.LockSet, lockIdx, lx, ly int) {
 // 	if set.AlreadyLocked(lockIdx) {
@@ -295,34 +286,38 @@ func (w *World) TryLockTile(set *lockset.LockSet, x, y int) bool {
 // 	*set = lockset.LockSet{}
 // }
 
-func (w *World) initMine(idx, x, y int) uint32 {
+func (w *World) initMine(idx, x, y int) bool {
 	thresh := GetMineChance(x, y)
 	randVal := rand.Float64()
-	var result uint32 = 0
 	if randVal <= thresh {
 		w.Tiles[idx].SetMine()
-		result = 1
+		return true
 	}
-	return result
+	return false
 }
 
-func (w *World) initNearby(idx, x, y int) {
-	var total uint8 = 0
-	yMin := max(y-1, 0)
-	yMax := min(y+1, int(WIDTH-1))
-	xMin := max(y-1, 0)
-	xMax := min(y+1, int(HEIGHT-1))
-	for yy := yMin; yy <= yMax; yy++ {
-		for xx := xMin; xx <= xMax; xx++ {
-			if xx != x || yy != y {
-				nearIdx := GetIndex(xx, yy)
-				if w.Tiles[nearIdx].IsMine() {
-					total++
-				}
-			}
-		}
-	}
-	w.Tiles[idx].SetNearby(total)
+// func (w *World) initNearby(idx, x, y int) {
+// 	var total uint8 = 0
+// 	utils.DoFuncOnNearbyCoords()
+// 	yMin := max(y-1, 0)
+// 	yMax := min(y+1, int(WIDTH-1))
+// 	xMin := max(y-1, 0)
+// 	xMax := min(y+1, int(HEIGHT-1))
+// 	for yy := yMin; yy <= yMax; yy++ {
+// 		for xx := xMin; xx <= xMax; xx++ {
+// 			if xx != x || yy != y {
+// 				nearIdx := GetIndex(xx, yy)
+// 				if w.Tiles[nearIdx].IsMine() {
+// 					total++
+// 				}
+// 			}
+// 		}
+// 	}
+// 	w.Tiles[idx].SetNearby(total)
+// }
+
+func coordNotOnEdge(x, y int) bool {
+	return x > 0 && x < MAX_X && y > 0 && y < MAX_Y
 }
 
 func (w *World) InitNew(id uint32) {
@@ -331,28 +326,26 @@ func (w *World) InitNew(id uint32) {
 	w.ExplodedMines.Store(0)
 	w.Ended.Store(false)
 	w.Expires = time.Now().Add(WORLD_TIME_LIMIT)
-	for y := range HEIGHT {
-		for x := range WIDTH {
-			idx := GetIndex(x, y)
-			w.Tiles[idx] = tile.Tile(0)
-			if x > 0 && x < WIDTH-1 && y > 0 && y < HEIGHT-1 {
-				w.TotalMines += w.initMine(idx, x, y)
+	for idx := range TILES {
+		w.Tiles[idx] = tile.Tile(0)
+	}
+	for idx := range TILES {
+		x, y := GetCoords(idx)
+		if coordNotOnEdge(x, y) {
+			mine := w.initMine(idx, x, y)
+			if mine {
+				w.TotalMines += 1
+				nears := utils.GetNearbyCoords(0, 0, x, y, MAX_X, MAX_Y)
+				for i := range nears.Len {
+					xx := nears.X[i]
+					yy := nears.Y[i]
+					nearIdx := GetIndex(xx, yy)
+					w.Tiles[nearIdx].IncrNearbyMineCount()
+				}
 			}
+		} else {
+			w.Tiles[idx].SetVizSweptEmpty()
 		}
-	}
-	for y := range HEIGHT {
-		for x := range WIDTH {
-			idx := GetIndex(x, y)
-			w.initNearby(idx, x, y)
-		}
-	}
-	for idx := range WIDTH {
-		w.Tiles[idx].SetViz(tile.VIZ_EMPTY)
-		w.Tiles[idx+LAST_ROW].SetViz(tile.VIZ_EMPTY)
-	}
-	for idx := range HEIGHT - 2 {
-		w.Tiles[WIDTH+(WIDTH*idx)].SetViz(tile.VIZ_EMPTY)
-		w.Tiles[WIDTH+(WIDTH*idx)+WIDTH-1].SetViz(tile.VIZ_EMPTY)
 	}
 }
 
@@ -369,10 +362,10 @@ func (w *World) SweepTile(x, y int) sweep_result.SweepResult {
 	}
 	isMine := t.IsMine()
 	if isMine {
-		t.SetViz(tile.VIZ_BOMB)
+		t.SetVizSweptBomb()
 		w.ExplodedMines.Add(1)
 	} else {
-		t.SetViz(tile.VIZ_EMPTY)
+		t.SetVizSweptEmpty()
 	}
 	result.AddTile(w.getScore(x, y), t.GetIcon(), x, y)
 	if isMine {
@@ -482,7 +475,7 @@ func (w *World) cascade(result *sweep_result.SweepResult, x, y int) {
 		xx, yy := utils.AddOffset(x, y, off)
 		if xx >= 0 && xx < WIDTH && yy >= 0 && yy < HEIGHT {
 			thisIdx := GetIndex(xx, yy)
-			w.Tiles[thisIdx].SetViz(tile.VIZ_EMPTY)
+			w.Tiles[thisIdx].SetVizSweptEmpty()
 			if w.Tiles[thisIdx].GetNearby() == 0 {
 				casc += add
 			}
@@ -499,7 +492,7 @@ func (w *World) cascade(result *sweep_result.SweepResult, x, y int) {
 			xx, yy := utils.AddOffset(x, y, off)
 			if xx >= 0 && xx < WIDTH && yy >= 0 && yy < HEIGHT {
 				thisIdx := GetIndex(xx, yy)
-				w.Tiles[thisIdx].SetViz(tile.VIZ_EMPTY)
+				w.Tiles[thisIdx].SetVizSweptEmpty()
 				if w.Tiles[thisIdx].GetNearby() == 0 {
 					casc += add
 				}
@@ -516,7 +509,7 @@ func (w *World) cascade(result *sweep_result.SweepResult, x, y int) {
 			xx, yy := utils.AddOffset(x, y, off)
 			if xx >= 0 && xx < WIDTH && yy >= 0 && yy < HEIGHT {
 				thisIdx := GetIndex(xx, yy)
-				w.Tiles[thisIdx].SetViz(tile.VIZ_EMPTY)
+				w.Tiles[thisIdx].SetVizSweptEmpty()
 				result.AddTile(uint32(BOMB_NEAR_BASE_SCORE[0]), w.Tiles[thisIdx].GetIcon(), xx, yy)
 			}
 			casc &= ^mask
@@ -526,134 +519,134 @@ func (w *World) cascade(result *sweep_result.SweepResult, x, y int) {
 	}
 }
 
-// This is NOT safe for concurrent use when world is being played on,
-// this is only for testing/debugging purposes
-func (w *World) DrawState(wr io.Writer) {
-	var i uint = 0
-	var buf [4]byte
-	capFill := strings.Repeat("═", int(WIDTH))
-	var cap string = "╔" + capFill + "╗\n"
-	wr.Write([]byte(cap))
-	for range HEIGHT {
-		n := utf8.EncodeRune(buf[:], '║')
-		wr.Write(buf[:n])
-		for range WIDTH {
-			iconCode := w.Tiles[i].GetIcon()
-			switch iconCode {
-			case tile.ICON_CODE_BOMB:
-				wr.Write([]byte(ICON_SKULL))
-			case tile.ICON_CODE_OPAQUE:
-				wr.Write([]byte(ICON_OPAQUE))
-			case tile.ICON_CODE_FLAG:
-				wr.Write([]byte(ICON_FLAG))
-			case tile.ICON_CODE_0:
-				wr.Write([]byte(ICON_0))
-			case tile.ICON_CODE_1:
-				wr.Write([]byte(ICON_1))
-			case tile.ICON_CODE_2:
-				wr.Write([]byte(ICON_2))
-			case tile.ICON_CODE_3:
-				wr.Write([]byte(ICON_3))
-			case tile.ICON_CODE_4:
-				wr.Write([]byte(ICON_4))
-			case tile.ICON_CODE_5:
-				wr.Write([]byte(ICON_5))
-			case tile.ICON_CODE_6:
-				wr.Write([]byte(ICON_6))
-			case tile.ICON_CODE_7:
-				wr.Write([]byte(ICON_7))
-			case tile.ICON_CODE_8:
-				wr.Write([]byte(ICON_8))
-			default:
-				wr.Write([]byte(ICON_0))
-			}
-			i++
-		}
-		n = utf8.EncodeRune(buf[:], '║')
-		buf[n] = 0x0A
-		wr.Write(buf[:n+1])
-	}
-	cap = "╚" + capFill + "╝\n"
-	wr.Write([]byte(cap))
-}
+// // This is NOT safe for concurrent use when world is being played on,
+// // this is only for testing/debugging purposes
+// func (w *World) DrawState(wr io.Writer) {
+// 	var i uint = 0
+// 	var buf [4]byte
+// 	capFill := strings.Repeat("═", int(WIDTH))
+// 	var cap string = "╔" + capFill + "╗\n"
+// 	wr.Write([]byte(cap))
+// 	for range HEIGHT {
+// 		n := utf8.EncodeRune(buf[:], '║')
+// 		wr.Write(buf[:n])
+// 		for range WIDTH {
+// 			iconCode := w.Tiles[i].GetIcon()
+// 			switch iconCode {
+// 			case tile.ICON_CODE_BOMB:
+// 				wr.Write([]byte(ICON_SKULL))
+// 			case tile.ICON_CODE_OPAQUE:
+// 				wr.Write([]byte(ICON_OPAQUE))
+// 			case tile.ICON_CODE_FLAG:
+// 				wr.Write([]byte(ICON_FLAG))
+// 			case tile.ICON_CODE_0:
+// 				wr.Write([]byte(ICON_0))
+// 			case tile.ICON_CODE_1:
+// 				wr.Write([]byte(ICON_1))
+// 			case tile.ICON_CODE_2:
+// 				wr.Write([]byte(ICON_2))
+// 			case tile.ICON_CODE_3:
+// 				wr.Write([]byte(ICON_3))
+// 			case tile.ICON_CODE_4:
+// 				wr.Write([]byte(ICON_4))
+// 			case tile.ICON_CODE_5:
+// 				wr.Write([]byte(ICON_5))
+// 			case tile.ICON_CODE_6:
+// 				wr.Write([]byte(ICON_6))
+// 			case tile.ICON_CODE_7:
+// 				wr.Write([]byte(ICON_7))
+// 			case tile.ICON_CODE_8:
+// 				wr.Write([]byte(ICON_8))
+// 			default:
+// 				wr.Write([]byte(ICON_0))
+// 			}
+// 			i++
+// 		}
+// 		n = utf8.EncodeRune(buf[:], '║')
+// 		buf[n] = 0x0A
+// 		wr.Write(buf[:n+1])
+// 	}
+// 	cap = "╚" + capFill + "╝\n"
+// 	wr.Write([]byte(cap))
+// }
 
-// This is NOT safe for cuncurrent use when world is being played on,
-// this is only for testing/debugging purposes
-func (w *World) DrawMines(wr io.Writer) {
-	var i uint = 0
-	var buf [4]byte
-	capFill := strings.Repeat("═", int(WIDTH))
-	var cap string = "╔" + capFill + "╗\n"
-	wr.Write([]byte(cap))
-	for range HEIGHT {
-		n := utf8.EncodeRune(buf[:], '║')
-		wr.Write(buf[:n])
-		for range WIDTH {
-			isMine := w.Tiles[i].IsMine()
-			if isMine {
-				wr.Write([]byte(ICON_BOMB))
-			} else {
-				wr.Write([]byte(ICON_0))
-			}
-			i++
-		}
-		n = utf8.EncodeRune(buf[:], '║')
-		buf[n] = 0x0A
-		wr.Write(buf[:n+1])
-	}
-	cap = "╚" + capFill + "╝\n"
-	wr.Write([]byte(cap))
-}
+// // This is NOT safe for cuncurrent use when world is being played on,
+// // this is only for testing/debugging purposes
+// func (w *World) DrawMines(wr io.Writer) {
+// 	var i uint = 0
+// 	var buf [4]byte
+// 	capFill := strings.Repeat("═", int(WIDTH))
+// 	var cap string = "╔" + capFill + "╗\n"
+// 	wr.Write([]byte(cap))
+// 	for range HEIGHT {
+// 		n := utf8.EncodeRune(buf[:], '║')
+// 		wr.Write(buf[:n])
+// 		for range WIDTH {
+// 			isMine := w.Tiles[i].IsMine()
+// 			if isMine {
+// 				wr.Write([]byte(ICON_BOMB))
+// 			} else {
+// 				wr.Write([]byte(ICON_0))
+// 			}
+// 			i++
+// 		}
+// 		n = utf8.EncodeRune(buf[:], '║')
+// 		buf[n] = 0x0A
+// 		wr.Write(buf[:n+1])
+// 	}
+// 	cap = "╚" + capFill + "╝\n"
+// 	wr.Write([]byte(cap))
+// }
 
-// This is NOT safe for cuncurrent use when world is being played on,
-// this is only for testing/debugging purposes
-func (w *World) DrawNearby(wr io.Writer) {
-	var i uint = 0
-	var buf [4]byte
-	capFill := strings.Repeat("═", int(WIDTH))
-	var cap string = "╔" + capFill + "╗\n"
-	wr.Write([]byte(cap))
-	for range HEIGHT {
-		n := utf8.EncodeRune(buf[:], '║')
-		wr.Write(buf[:n])
-		for range WIDTH {
-			isMine := w.Tiles[i].IsMine()
-			if isMine {
-				wr.Write([]byte(ICON_BOMB))
-			} else {
-				nearby := w.Tiles[i].GetNearby()
-				switch nearby {
-				case 0:
-					wr.Write([]byte(ICON_0))
-				case 1:
-					wr.Write([]byte(ICON_1))
-				case 2:
-					wr.Write([]byte(ICON_2))
-				case 3:
-					wr.Write([]byte(ICON_3))
-				case 4:
-					wr.Write([]byte(ICON_4))
-				case 5:
-					wr.Write([]byte(ICON_5))
-				case 6:
-					wr.Write([]byte(ICON_6))
-				case 7:
-					wr.Write([]byte(ICON_7))
-				case 8:
-					wr.Write([]byte(ICON_8))
-				default:
-					wr.Write([]byte(ICON_0))
-				}
-			}
-			i++
-		}
-		n = utf8.EncodeRune(buf[:], '║')
-		buf[n] = 0x0A
-		wr.Write(buf[:n+1])
-	}
-	cap = "╚" + capFill + "╝\n"
-	wr.Write([]byte(cap))
-}
+// // This is NOT safe for cuncurrent use when world is being played on,
+// // this is only for testing/debugging purposes
+// func (w *World) DrawNearby(wr io.Writer) {
+// 	var i uint = 0
+// 	var buf [4]byte
+// 	capFill := strings.Repeat("═", int(WIDTH))
+// 	var cap string = "╔" + capFill + "╗\n"
+// 	wr.Write([]byte(cap))
+// 	for range HEIGHT {
+// 		n := utf8.EncodeRune(buf[:], '║')
+// 		wr.Write(buf[:n])
+// 		for range WIDTH {
+// 			isMine := w.Tiles[i].IsMine()
+// 			if isMine {
+// 				wr.Write([]byte(ICON_BOMB))
+// 			} else {
+// 				nearby := w.Tiles[i].GetNearby()
+// 				switch nearby {
+// 				case 0:
+// 					wr.Write([]byte(ICON_0))
+// 				case 1:
+// 					wr.Write([]byte(ICON_1))
+// 				case 2:
+// 					wr.Write([]byte(ICON_2))
+// 				case 3:
+// 					wr.Write([]byte(ICON_3))
+// 				case 4:
+// 					wr.Write([]byte(ICON_4))
+// 				case 5:
+// 					wr.Write([]byte(ICON_5))
+// 				case 6:
+// 					wr.Write([]byte(ICON_6))
+// 				case 7:
+// 					wr.Write([]byte(ICON_7))
+// 				case 8:
+// 					wr.Write([]byte(ICON_8))
+// 				default:
+// 					wr.Write([]byte(ICON_0))
+// 				}
+// 			}
+// 			i++
+// 		}
+// 		n = utf8.EncodeRune(buf[:], '║')
+// 		buf[n] = 0x0A
+// 		wr.Write(buf[:n+1])
+// 	}
+// 	cap = "╚" + capFill + "╝\n"
+// 	wr.Write([]byte(cap))
+// }
 
 func (w *World) PrintStatus(wr io.Writer) {
 	exploed := w.ExplodedMines.Load()
