@@ -7,72 +7,62 @@ import (
 	"log"
 
 	"github.com/gabe-lee/OurSweeper/internal/client_world"
+	C "github.com/gabe-lee/OurSweeper/internal/common"
+	"github.com/gabe-lee/OurSweeper/internal/coord"
 	"github.com/gabe-lee/OurSweeper/internal/server_world"
+	"github.com/gabe-lee/OurSweeper/internal/sweep_request"
 	"github.com/gabe-lee/OurSweeper/internal/tile"
 	"github.com/gabe-lee/OurSweeper/internal/utils"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-const (
-	TILE_SIZE        int = 32
-	TILE_SIZE_SCALED int = TILE_SIZE / SCALE_DOWN
-
-	TILE_SHEET_WIDTH  int = 12
-	TILE_SHEET_HEIGHT int = 4
-
-	WINDOW_WIDTH     int     = 800
-	WINDOW_HEIGHT    int     = 800
-	BOARD_WIDTH      int     = TILE_SIZE_SCALED * server_world.WIDTH
-	BOARD_HEIGHT     int     = TILE_SIZE_SCALED * server_world.HEIGHT
-	BOARD_OVERFLOW_X int     = BOARD_WIDTH - WINDOW_WIDTH
-	BOARD_OVERFLOW_Y int     = BOARD_HEIGHT - WINDOW_HEIGHT
-	MIN_BOARD_POS_X  float64 = float64(-BOARD_OVERFLOW_X)
-	MIN_BOARD_POS_Y  float64 = float64(-BOARD_OVERFLOW_Y)
-	MAX_BOARD_POS_X  float64 = 0
-	MAX_BOARD_POS_Y  float64 = 0
-	SCALE_DOWN       int     = 2
-	WHEEL_SPEED      float64 = 6.0
+type (
+	Coord       = coord.Coord
+	ServerWorld = server_world.World
+	ClientWorld = client_world.ClientWorld
+	EbitImage   = ebiten.Image
 )
-
-var BOARD_TILES = [16][2]int{
-	tile.ICON_CODE_0:      {0, 0},
-	tile.ICON_CODE_1:      {1 * TILE_SIZE, 0},
-	tile.ICON_CODE_2:      {2 * TILE_SIZE, 0},
-	tile.ICON_CODE_3:      {3 * TILE_SIZE, 0},
-	tile.ICON_CODE_4:      {4 * TILE_SIZE, 0},
-	tile.ICON_CODE_5:      {5 * TILE_SIZE, 0},
-	tile.ICON_CODE_6:      {6 * TILE_SIZE, 0},
-	tile.ICON_CODE_7:      {7 * TILE_SIZE, 0},
-	tile.ICON_CODE_8:      {8 * TILE_SIZE, 0},
-	tile.ICON_CODE_FLAG:   {9 * TILE_SIZE, 0},
-	tile.ICON_CODE_BOMB:   {10 * TILE_SIZE, 0},
-	tile.ICON_CODE_OPAQUE: {11 * TILE_SIZE, 0},
-}
 
 //go:embed tiles.png
 var tilesPng []byte
 
 type GameClient struct {
-	World  client_world.ClientWorld
+	Server *ServerWorld //Temporary until network implemented
+	World  ClientWorld
 	Atlas  *ebiten.Image
 	BoardX float64
 	BoardY float64
+	Input  Input
+	Score  uint32
+	Frame  uint64
+}
+
+type Input struct {
+	ScrollX           float64
+	ScrollY           float64
+	MouseX            int
+	MouseY            int
+	MouseLJustPressed bool
+	MouseRJustPressed bool
+	MouseLDown        bool
 }
 
 // Draw implements ebiten.Game.
-func (g *GameClient) Draw(screen *ebiten.Image) {
-	for i := range server_world.TILES {
-		x, y := server_world.GetCoords(i)
-		px, py := x*TILE_SIZE/SCALE_DOWN, y*TILE_SIZE/SCALE_DOWN
-		iconIdx := g.World.Tiles[i].GetIcon()
-		iconTopLeft := BOARD_TILES[iconIdx]
-		iconBotRight := [2]int{iconTopLeft[0] + TILE_SIZE, iconTopLeft[1] + TILE_SIZE}
+func (g *GameClient) Draw(screen *EbitImage) {
+	for i := range C.WORLD_TILE_COUNT {
+		tilePos := coord.FromIndex(i, C.TY_SHIFT, C.TX_MASK)
+
+		boardPos := tilePos.MultScalar(C.TILE_SIZE).DivScalar(C.DISPLAY_SCALE_DOWN)
+		iconIdx := g.World.Tiles[i].GetIconClient()
+		iconTopLeft := C.BOARD_TILES[iconIdx]
+		iconBotRight := [2]int{iconTopLeft[0] + C.TILE_SIZE, iconTopLeft[1] + C.TILE_SIZE}
 		rect := image.Rect(iconTopLeft[0], iconTopLeft[1], iconBotRight[0], iconBotRight[1])
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Scale(0.5, 0.5)
-		op.GeoM.Translate(float64(px), float64(py))
+		op.GeoM.Translate(float64(boardPos.X), float64(boardPos.Y))
 		op.GeoM.Translate(g.BoardX, g.BoardY)
-		screen.DrawImage(g.Atlas.SubImage(rect).(*ebiten.Image), op)
+		screen.DrawImage(g.Atlas.SubImage(rect).(*EbitImage), op)
 	}
 }
 
@@ -81,15 +71,18 @@ func (g *GameClient) Layout(outsideWidth int, outsideHeight int) (screenWidth in
 	return outsideWidth, outsideHeight
 }
 
-func (g *GameClient) Init(world *server_world.World) {
+func (g *GameClient) Init(world *ServerWorld) {
 	g.World = client_world.ClientWorld{
 		Id:            world.Id.Load(),
-		Tiles:         world.Tiles,
 		TotalMines:    world.TotalMines,
 		ExplodedMines: world.ExplodedMines.Load(),
 		SweptTiles:    world.SweptTiles.Load(),
 		Ended:         world.Ended.Load(),
 		Expires:       world.Expires,
+	}
+	g.Server = world // Temp
+	for i := range C.WORLD_TILE_COUNT {
+		g.World.Tiles[i] = tile.Tile(g.Server.Tiles[i].GetIconServer())
 	}
 	img, _, err := image.Decode(bytes.NewReader(tilesPng))
 	if err != nil {
@@ -100,12 +93,54 @@ func (g *GameClient) Init(world *server_world.World) {
 
 // Update implements ebiten.Game.
 func (g *GameClient) Update() error {
-	wx, wy := ebiten.Wheel()
-	g.BoardX += wx * WHEEL_SPEED
-	g.BoardY += wy * WHEEL_SPEED
-	g.BoardX = utils.Clamp(MIN_BOARD_POS_X, g.BoardX, MAX_BOARD_POS_X)
-	g.BoardY = utils.Clamp(MIN_BOARD_POS_Y, g.BoardY, MAX_BOARD_POS_Y)
+	g.Frame += 1
+	{ // Poll input
+		wx, wy := ebiten.Wheel()
+		g.Input.ScrollX = wx
+		g.Input.ScrollY = wy
+		cx, cy := ebiten.CursorPosition()
+		g.Input.MouseX = cx
+		g.Input.MouseY = cy
+		g.Input.MouseLJustPressed = inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+		g.Input.MouseRJustPressed = inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight)
+	}
+	// Update State
+	g.BoardX += g.Input.ScrollX * C.WHEEL_SPEED
+	g.BoardY += g.Input.ScrollY * C.WHEEL_SPEED
+	g.BoardX = utils.Clamp(C.MIN_BOARD_POS_X, g.BoardX, C.MAX_BOARD_POS_X)
+	g.BoardY = utils.Clamp(C.MIN_BOARD_POS_Y, g.BoardY, C.MAX_BOARD_POS_Y)
+	if g.Input.MouseLJustPressed {
+		tilePos := g.MousePosToTilePos()
+		request := sweep_request.NewSweepRequest(tilePos)
+		//TODO send network request instead
+		result := g.Server.SweepTile(request.Pos.ToCoord())
+		//TODO listen for response
+		for i := range result.Len {
+			newPos := result.Coords[i].ToCoord()
+			icon := result.Icons[i]
+			idx := newPos.ToIndex(C.TY_SHIFT)
+			g.World.Tiles[idx] = tile.Tile(icon)
+			g.Score += uint32(result.Score)
+		}
+	}
 	return nil
+}
+
+func (g *GameClient) MousePosToBoardPos() (x, y float64) {
+	x, y = float64(g.Input.MouseX), float64(g.Input.MouseY)
+	x += -g.BoardX
+	y += -g.BoardY
+	return x, y
+}
+
+func (g *GameClient) MousePosToTilePos() (pos Coord) {
+	fx, fy := g.MousePosToBoardPos()
+	fx /= float64(C.TILE_SIZE_SCALED)
+	fy /= float64(C.TILE_SIZE_SCALED)
+	return Coord{
+		X: int(fx),
+		Y: int(fy),
+	}
 }
 
 var _ ebiten.Game = (*GameClient)(nil)

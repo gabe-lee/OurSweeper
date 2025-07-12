@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gabe-lee/OurSweeper/internal/ansi"
-	"github.com/gabe-lee/OurSweeper/internal/server_world"
+	C "github.com/gabe-lee/OurSweeper/internal/common"
 	"github.com/gabe-lee/OurSweeper/internal/tile"
 )
 
@@ -29,7 +29,7 @@ const (
 
 type ClientWorld struct {
 	Id            uint32
-	Tiles         [server_world.TILES]tile.Tile
+	Tiles         [C.WORLD_TILE_COUNT]tile.Tile
 	TotalMines    uint32
 	ExplodedMines uint32
 	SweptTiles    uint32
@@ -42,38 +42,38 @@ type ClientWorld struct {
 func (w *ClientWorld) DrawState(wr io.Writer) {
 	var i uint = 0
 	var buf [4]byte
-	capFill := strings.Repeat("═", int(server_world.WIDTH))
+	capFill := strings.Repeat("═", int(C.WORLD_TILE_WIDTH))
 	var cap string = "╔" + capFill + "╗\n"
 	wr.Write([]byte(cap))
-	for range server_world.HEIGHT {
+	for range C.WORLD_TILE_HEIGHT {
 		n := utf8.EncodeRune(buf[:], '║')
 		wr.Write(buf[:n])
-		for range server_world.WIDTH {
-			iconCode := w.Tiles[i].GetIcon()
+		for range C.WORLD_HALF_WIDTH {
+			iconCode := w.Tiles[i].GetIconServer()
 			switch iconCode {
-			case tile.ICON_CODE_BOMB:
+			case C.ICON_CODE_BOMB:
 				wr.Write([]byte(ICON_SKULL))
-			case tile.ICON_CODE_OPAQUE:
+			case C.ICON_CODE_OPAQUE:
 				wr.Write([]byte(ICON_OPAQUE))
-			case tile.ICON_CODE_FLAG:
+			case C.ICON_CODE_FLAG:
 				wr.Write([]byte(ICON_FLAG))
-			case tile.ICON_CODE_0:
+			case C.ICON_CODE_0:
 				wr.Write([]byte(ICON_0))
-			case tile.ICON_CODE_1:
+			case C.ICON_CODE_1:
 				wr.Write([]byte(ICON_1))
-			case tile.ICON_CODE_2:
+			case C.ICON_CODE_2:
 				wr.Write([]byte(ICON_2))
-			case tile.ICON_CODE_3:
+			case C.ICON_CODE_3:
 				wr.Write([]byte(ICON_3))
-			case tile.ICON_CODE_4:
+			case C.ICON_CODE_4:
 				wr.Write([]byte(ICON_4))
-			case tile.ICON_CODE_5:
+			case C.ICON_CODE_5:
 				wr.Write([]byte(ICON_5))
-			case tile.ICON_CODE_6:
+			case C.ICON_CODE_6:
 				wr.Write([]byte(ICON_6))
-			case tile.ICON_CODE_7:
+			case C.ICON_CODE_7:
 				wr.Write([]byte(ICON_7))
-			case tile.ICON_CODE_8:
+			case C.ICON_CODE_8:
 				wr.Write([]byte(ICON_8))
 			default:
 				wr.Write([]byte(ICON_0))
@@ -93,13 +93,13 @@ func (w *ClientWorld) DrawState(wr io.Writer) {
 func (w *ClientWorld) DrawMines(wr io.Writer) {
 	var i uint = 0
 	var buf [4]byte
-	capFill := strings.Repeat("═", int(server_world.WIDTH))
+	capFill := strings.Repeat("═", int(C.WORLD_TILE_WIDTH))
 	var cap string = "╔" + capFill + "╗\n"
 	wr.Write([]byte(cap))
-	for range server_world.HEIGHT {
+	for range C.WORLD_TILE_HEIGHT {
 		n := utf8.EncodeRune(buf[:], '║')
 		wr.Write(buf[:n])
-		for range server_world.WIDTH {
+		for range C.WORLD_TILE_WIDTH {
 			isMine := w.Tiles[i].IsMine()
 			if isMine {
 				wr.Write([]byte(ICON_BOMB))
@@ -121,13 +121,13 @@ func (w *ClientWorld) DrawMines(wr io.Writer) {
 func (w *ClientWorld) DrawNearby(wr io.Writer) {
 	var i uint = 0
 	var buf [4]byte
-	capFill := strings.Repeat("═", int(server_world.WIDTH))
+	capFill := strings.Repeat("═", int(C.WORLD_TILE_WIDTH))
 	var cap string = "╔" + capFill + "╗\n"
 	wr.Write([]byte(cap))
-	for range server_world.HEIGHT {
+	for range C.WORLD_TILE_HEIGHT {
 		n := utf8.EncodeRune(buf[:], '║')
 		wr.Write(buf[:n])
-		for range server_world.WIDTH {
+		for range C.WORLD_TILE_WIDTH {
 			isMine := w.Tiles[i].IsMine()
 			if isMine {
 				wr.Write([]byte(ICON_BOMB))

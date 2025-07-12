@@ -4,23 +4,31 @@ import (
 	"encoding/binary"
 	"io"
 
-	msg "github.com/gabe-lee/OurSweeper/internal/messages"
+	"github.com/gabe-lee/OurSweeper/internal/coord"
 	"github.com/gabe-lee/OurSweeper/internal/utils"
 	"github.com/gabe-lee/OurSweeper/internal/wire_serializer"
 )
 
+const (
+	OWN_SWEEP uint32 = iota
+	OTHER_SWEEP
+)
+
+type (
+	Coord     = coord.Coord
+	ByteCoord = coord.ByteCoord
+)
+
 type SweepResult struct {
-	Score  uint32
-	Coords [74]byte
+	Score  uint16
+	Coords [36]ByteCoord
 	Icons  [36]byte
 	Len    byte
 }
 
-func (s *SweepResult) AddTile(score uint32, icon byte, x, y int) {
+func (s *SweepResult) AddTile(score uint16, icon byte, pos Coord) {
 	s.Score += score
-	c := s.Len * 2
-	s.Coords[c] = byte(x)
-	s.Coords[c+1] = byte(y)
+	s.Coords[s.Len] = pos.ToByteCoord()
 	s.Icons[s.Len] = icon
 	s.Len += 1
 }
@@ -28,8 +36,8 @@ func (s *SweepResult) AddTile(score uint32, icon byte, x, y int) {
 func (s *SweepResult) WriteWire(w io.Writer, order binary.ByteOrder, code uint32) error {
 	var e utils.ErrorChecker
 	switch code {
-	case msg.SERVER_SWEEP_OWN:
-		if e.IsErr(binary.Write(w, order, msg.SERVER_SWEEP_OWN)) {
+	case OWN_SWEEP:
+		if e.IsErr(binary.Write(w, order, OWN_SWEEP)) {
 			return e.Err
 		}
 		if e.IsErr(binary.Write(w, order, s.Score)) {
@@ -44,8 +52,8 @@ func (s *SweepResult) WriteWire(w io.Writer, order binary.ByteOrder, code uint32
 		if e.IsErr(binary.Write(w, order, s.Icons[:s.Len])) {
 			return e.Err
 		}
-	case msg.SERVER_SWEEP_OTHER:
-		if e.IsErr(binary.Write(w, order, msg.SERVER_SWEEP_OTHER)) {
+	case OTHER_SWEEP:
+		if e.IsErr(binary.Write(w, order, OTHER_SWEEP)) {
 			return e.Err
 		}
 		if e.IsErr(binary.Write(w, order, s.Len)) {
@@ -58,14 +66,18 @@ func (s *SweepResult) WriteWire(w io.Writer, order binary.ByteOrder, code uint32
 			return e.Err
 		}
 	default:
-		return wire_serializer.MakeError(code, "SweepResult", []uint32{msg.SERVER_SWEEP_OWN, msg.SERVER_SWEEP_OTHER})
+		return wire_serializer.MakeError(code, "SweepResult", []uint32{OWN_SWEEP, OTHER_SWEEP})
 	}
 	return nil
 }
-func (s *SweepResult) ReadWire(r io.Reader, order binary.ByteOrder, code uint32) error {
+func (s *SweepResult) ReadWire(r io.Reader, order binary.ByteOrder) error {
 	var e utils.ErrorChecker
+	var code uint32
+	if e.IsErr(binary.Read(r, order, &code)) {
+		return e.Err
+	}
 	switch code {
-	case msg.SERVER_SWEEP_OWN:
+	case OWN_SWEEP:
 		if e.IsErr(binary.Read(r, order, s.Score)) {
 			return e.Err
 		}
@@ -78,7 +90,7 @@ func (s *SweepResult) ReadWire(r io.Reader, order binary.ByteOrder, code uint32)
 		if e.IsErr(binary.Read(r, order, s.Icons[:s.Len])) {
 			return e.Err
 		}
-	case msg.SERVER_SWEEP_OTHER:
+	case OTHER_SWEEP:
 		if e.IsErr(binary.Read(r, order, s.Len)) {
 			return e.Err
 		}
@@ -89,7 +101,7 @@ func (s *SweepResult) ReadWire(r io.Reader, order binary.ByteOrder, code uint32)
 			return e.Err
 		}
 	default:
-		return wire_serializer.MakeError(code, "SweepResult", []uint32{msg.SERVER_SWEEP_OWN, msg.SERVER_SWEEP_OTHER})
+		return wire_serializer.MakeError(code, "SweepResult", []uint32{OWN_SWEEP, OTHER_SWEEP})
 	}
 	return nil
 }

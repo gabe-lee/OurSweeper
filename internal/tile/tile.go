@@ -1,5 +1,9 @@
 package tile
 
+import (
+	C "github.com/gabe-lee/OurSweeper/internal/common"
+)
+
 type Tile uint8
 
 const (
@@ -12,23 +16,6 @@ const (
 	VIZ_FLAG     uint8 = 0b0_01_0_0000
 	VIZ_EMPTY    uint8 = 0b0_10_0_0000
 	VIZ_BOMB     uint8 = 0b0_11_0_0000
-
-	ICON_CODE_0      uint8 = 0
-	ICON_CODE_1      uint8 = 1
-	ICON_CODE_2      uint8 = 2
-	ICON_CODE_3      uint8 = 3
-	ICON_CODE_4      uint8 = 4
-	ICON_CODE_5      uint8 = 5
-	ICON_CODE_6      uint8 = 6
-	ICON_CODE_7      uint8 = 7
-	ICON_CODE_8      uint8 = 8
-	ICON_CODE_9      uint8 = 9
-	ICON_CODE_10     uint8 = 10
-	ICON_CODE_11     uint8 = 11
-	ICON_CODE_12     uint8 = 12
-	ICON_CODE_BOMB   uint8 = 13
-	ICON_CODE_FLAG   uint8 = 14
-	ICON_CODE_OPAQUE uint8 = 15
 )
 
 func (t Tile) GetNearby() uint8 {
@@ -56,6 +43,7 @@ func (t Tile) GetViz() uint8 {
 	return uint8(t) & VIZ_MASK
 }
 func (t Tile) IsSwept() bool {
+	// fmt.Printf("TILE:  %08b\nSWEPT: %08b\nAND:   %08b\nRESULT: %v\n", uint8(t), VIZ_EMPTY, uint8(t)&VIZ_EMPTY, uint8(t)&VIZ_EMPTY == VIZ_EMPTY) //DEBUG
 	return uint8(t)&VIZ_EMPTY == VIZ_EMPTY
 }
 func (t *Tile) SetVizOpaque() {
@@ -74,16 +62,20 @@ func (t *Tile) SetVizSweptBomb() {
 	*t = Tile(uint8(*t) | VIZ_BOMB)
 }
 
-func (t Tile) GetIcon() uint8 {
+func (t Tile) GetIconServer() uint8 {
 	viz := t.GetViz()
 	switch viz {
 	case VIZ_OPAQUE:
-		return ICON_CODE_OPAQUE
+		return C.ICON_CODE_OPAQUE
 	case VIZ_FLAG:
-		return ICON_CODE_FLAG
+		return C.ICON_CODE_FLAG
 	case VIZ_BOMB:
-		return ICON_CODE_BOMB
+		return C.ICON_CODE_BOMB
 	default:
 		return t.GetNearby()
 	}
+}
+
+func (t Tile) GetIconClient() uint8 {
+	return t.GetNearby()
 }

@@ -1,37 +1,39 @@
 package sweep_request
 
-// import (
-// 	"encoding/binary"
-// 	"io"
+import (
+	"encoding/binary"
+	"io"
 
-// 	msg "github.com/gabe-lee/OurSweeper/internal/messages"
-// 	"github.com/gabe-lee/OurSweeper/internal/utils"
-// )
+	"github.com/gabe-lee/OurSweeper/internal/coord"
+	"github.com/gabe-lee/OurSweeper/internal/wire_serializer"
+)
 
-// type SweepRequest struct {
-// 	Index uint16
-// }
+type (
+	Coord     = coord.Coord
+	ByteCoord = coord.ByteCoord
+	ByteOrder = binary.ByteOrder
+	Writer    = io.Writer
+	Reader    = io.Reader
+)
 
-// func NewSweepRequest(x int, y int) SweepRequest {
-// 	return SweepRequest{
-// 		Index: uint16(world.GetIndex(x, y)),
-// 	}
-// }
+type SweepRequest struct {
+	Pos ByteCoord
+}
 
-// func (s *SweepRequest) WriteWire(w io.Writer, order binary.ByteOrder) error {
-// 	var e utils.ErrorChecker
-// 	if e.IsErr(binary.Write(w, order, msg.CLIENT_SWEEP)) {
-// 		return e.Err
-// 	}
-// 	if e.IsErr(binary.Write(w, order, s.Index)) {
-// 		return e.Err
-// 	}
-// 	return e.Err
-// }
-// func (s *SweepRequest) ReadWire(r io.Reader, order binary.ByteOrder) error {
-// 	var e utils.ErrorChecker
-// 	if e.IsErr(binary.Read(r, order, s.Index)) {
-// 		return e.Err
-// 	}
-// 	return e.Err
-// }
+// ReadWire implements wire_serializer.WireSerializer.
+func (s *SweepRequest) ReadWire(r Reader, order ByteOrder) error {
+	return s.Pos.ReadWire(r, order)
+}
+
+// WriteWire implements wire_serializer.WireSerializer.
+func (s *SweepRequest) WriteWire(w Writer, order ByteOrder, code uint32) error {
+	return s.Pos.WriteWire(w, order, 0)
+}
+
+func NewSweepRequest(pos coord.Coord) SweepRequest {
+	return SweepRequest{
+		Pos: pos.ToByteCoord(),
+	}
+}
+
+var _ wire_serializer.WireSerializer = (*SweepRequest)(nil)
