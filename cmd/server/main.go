@@ -3,11 +3,11 @@ package main
 import (
 	"os"
 
-	"github.com/gabe-lee/OurSweeper/internal/server_world"
+	App "github.com/gabe-lee/OurSweeper/internal"
 )
 
 func main() {
-	w := server_world.World{}
+	w := App.ServerWorld{}
 	w.InitNew(1)
 	// w.DrawNearby(os.Stdout)
 	// w.DrawState(os.Stdout)
