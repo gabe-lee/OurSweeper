@@ -42,18 +42,16 @@ type RelativeCoord struct {
 }
 
 type CascadeQueue struct {
-	ToCheckList  uint64
-	DidSweepList uint64
-	Idx          uint64
-	Center       Coord
+	ToCheckList uint64
+	Idx         uint64
+	Center      Coord
 }
 
 func NewCascadeQueue(center Coord) CascadeQueue {
 	queue := CascadeQueue{
-		ToCheckList:  INIT_NEAR_8,
-		DidSweepList: 0,
-		Center:       center,
-		Idx:          0,
+		ToCheckList: INIT_NEAR_8,
+		Center:      center,
+		Idx:         0,
 	}
 	return queue
 }
@@ -64,19 +62,18 @@ type CascadeCoord struct {
 }
 
 func (q *CascadeQueue) NextToCheck() (coord CascadeCoord, ok bool) {
-	nextMask := INIT_FULL_U64 << q.Idx
-	if q.ToCheckList&nextMask == 0 {
+	if q.Idx >= 64 {
 		return coord, false
 	}
-	coord.RelativeIdx = uint64(bits.TrailingZeros64(q.ToCheckList))
-	bit := uint64(1) << coord.RelativeIdx
-	q.ToCheckList &= ^bit
+	nextMask := INIT_FULL_U64 << q.Idx
+	toCheck := q.ToCheckList & nextMask
+	if toCheck == 0 {
+		return coord, false
+	}
+	coord.RelativeIdx = uint64(bits.TrailingZeros64(toCheck))
+	q.Idx = coord.RelativeIdx + 1
 	coord.Pos = q.Center.Add(NearCoordTable[coord.RelativeIdx])
 	return coord, true
-}
-
-func (q *CascadeQueue) AddSweep(coord CascadeCoord) {
-	q.DidSweepList |= uint64(1) << uint64(coord.RelativeIdx)
 }
 
 func (q *CascadeQueue) AddCascade(coord CascadeCoord) {

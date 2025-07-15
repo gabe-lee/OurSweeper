@@ -8,7 +8,6 @@ import (
 	"image"
 	"io"
 	"log"
-	"os"
 
 	"github.com/gabe-lee/OurSweeper/xmath"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -38,6 +37,7 @@ type GameClient struct {
 	RecieveMessages <-chan []byte
 	SendMessages    chan<- []byte
 	ErrorWriter     io.Writer
+	DebugServer     *ServerWorld //DEBUG
 }
 
 type Input struct {
@@ -54,7 +54,6 @@ type Input struct {
 func (g *GameClient) Draw(screen *EbitImage) {
 	for i := range WORLD_TILE_COUNT {
 		tilePos := CoordFromIndex(i, TY_SHIFT, TX_MASK)
-
 		boardPos := tilePos.MultScalar(TILE_SIZE).DivScalar(DISPLAY_SCALE_DOWN)
 		iconIdx := g.World.Tiles[i]
 		iconTopLeft := BOARD_TILES[iconIdx]
@@ -82,11 +81,9 @@ func (g *GameClient) Init(world *ServerWorld, clientToServer chan<- []byte, serv
 		Ended:         world.Ended.Load(),
 		Expires:       world.Expires,
 	}
-	g.ErrorWriter = os.Stderr //FIXME
-	g.SendMessages = clientToServer
-	g.RecieveMessages = serverToClient
+
 	for i := range WORLD_TILE_COUNT { //FIXME
-		g.World.Tiles[i] = world.Tiles[i].GetIconServer()
+		g.World.Tiles[i] = world.Tiles[i].GetIconForClient()
 	}
 	img, _, err := image.Decode(bytes.NewReader(tilesPng))
 	if err != nil {

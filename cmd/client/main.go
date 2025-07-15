@@ -19,7 +19,12 @@ func main() {
 	serverToClient := make(chan []byte, 64)
 	closeServer := make(chan struct{})
 	go runTempServer(&sWorld, serverToClient, clientToServer, closeServer)
-	client := App.GameClient{}
+	client := App.GameClient{
+		ErrorWriter:     os.Stderr, //FIXME
+		SendMessages:    clientToServer,
+		RecieveMessages: serverToClient,
+		DebugServer:     &sWorld,
+	}
 	client.Init(&sWorld, clientToServer, serverToClient)
 	ebiten.SetWindowSize(App.WINDOW_WIDTH, App.WINDOW_HEIGHT)
 	ebiten.SetWindowTitle("OurSweeper")

@@ -79,7 +79,7 @@ func (t *Tile) SetVizSweptBomb() {
 	*t = Tile(uint8(*t) | VIZ_BOMB)
 }
 
-func (t Tile) GetIconServer() uint8 {
+func (t Tile) GetIconForClient() uint8 {
 	viz := t.GetViz()
 	switch viz {
 	case VIZ_OPAQUE:
@@ -93,6 +93,9 @@ func (t Tile) GetIconServer() uint8 {
 	}
 }
 
-func (t Tile) GetIconClient() uint8 {
+func (t Tile) GetIconRevealed() uint8 {
+	if t.IsMine() {
+		return ICON_CODE_BOMB
+	}
 	return t.GetNearby()
 }

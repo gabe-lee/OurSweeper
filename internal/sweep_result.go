@@ -30,18 +30,24 @@ func (s *SweepResult) InitSweep(pos Coord, score uint16, icon byte) {
 	s.Len = 1
 }
 
-func (s *SweepResult) AddScoreAndIcon(score uint16, icon byte) {
-	s.Score += score
+func (s *SweepResult) AddCascadeSweep(icon byte, bit uint64) {
+	s.Score += uint16(BOMB_NEAR_BASE_SCORE[0])
 	i := s.Len >> 1
-	o := s.Len & 1
-	o |= o << 1
-	o |= o << 2
+	o := (s.Len & 1) << byte(ICON_BITS_SHIFT)
 	s.Icons[i] |= icon << o
 	s.Len += 1
+	s.RelativeBits |= bit
+}
+
+func (s *SweepResult) AddBombUpdate(icon byte, bit uint64) {
+	i := s.Len >> 1
+	o := (s.Len & 1) << byte(ICON_BITS_SHIFT)
+	s.Icons[i] |= icon << o
+	s.Len += 1
+	s.RelativeBits |= bit
 }
 
 func (s *SweepResult) DoActionOnAllTiles(action func(pos Coord, icon byte)) {
-
 	if s.Len == 0 {
 		return
 	}
@@ -56,14 +62,14 @@ func (s *SweepResult) DoActionOnAllTiles(action func(pos Coord, icon byte)) {
 		remainingBits &= ^bit
 		pos := center.Add(NearCoordTable[bitIdx])
 		iconIdx := idx >> 1
-		iconOff := idx & 1
-		iconOff |= iconOff << 1
-		iconOff |= iconOff << 2
+		iconOff := (idx & 1) << byte(ICON_BITS_SHIFT)
 		icon = (s.Icons[iconIdx] >> iconOff) & ICON_MASK
 		action(pos, icon)
 		idx += 1
 	}
 }
+
+
 
 // func (s SweepResult) Iter() SweepResultIter {
 // 	return SweepResultIter{

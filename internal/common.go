@@ -26,7 +26,7 @@ const (
 	WORLD_LAST_ROW = WORLD_TILE_COUNT - WORLD_TILE_WIDTH
 
 	MIN_MINE_CHANCE float64 = 0.15
-	MAX_MINE_CHANCE float64 = 0.30
+	MAX_MINE_CHANCE float64 = 0.25
 
 	INITIAL_OPAQUE_TILES int = WORLD_TILE_COUNT - INITIAL_SWEPT_TILES
 	INITIAL_SWEPT_TILES  int = (2 * WORLD_TILE_WIDTH) + ((2 * WORLD_TILE_HEIGHT) - 4)
@@ -64,7 +64,7 @@ const (
 	DISPLAY_SCALE_DOWN_F float64 = float64(DISPLAY_SCALE_DOWN)
 	WHEEL_SPEED          float64 = 6.0
 
-	MAX_CASCADE_LEN int = 40
+	MAX_CASCADE_LEN int = 64
 	MAX_SWEEP_LEN   int = MAX_CASCADE_LEN + 1
 	MAX_ICON_LEN    int = (MAX_SWEEP_LEN + 1) >> 1
 
@@ -79,49 +79,6 @@ var (
 	BOMB_NEAR_BASE_SCORE = [10]float64{
 		//0  1    2    3     4     5     6     7     8    Full Blind
 		1.0, 5.0, 7.0, 10.0, 15.0, 21.0, 34.0, 50.0, 1.0, 10.0,
-	}
-
-	// Cascade Position Chart
-	// +----------+
-	// |
-	// |  * 6IU *
-	// |   5TAJV
-	// |  4SH_BKW
-	// |  RG_*_CL
-	// |  3QF_DMX
-	// |   2PENY
-	// |  * 1OZ *
-	// |
-	// +----------+
-	NW_OFF = [2]int{-3, -3}
-	NE_OFF = [2]int{3, -3}
-	SW_OFF = [2]int{-3, 3}
-	SE_OFF = [2]int{3, 3}
-
-	OFFSET_NORTH = Coord{X: 0, Y: -1}
-	OFFSET_EAST  = Coord{X: 1, Y: 0}
-	OFFSET_SOUTH = Coord{X: 0, Y: 1}
-	OFFSET_WEST  = Coord{X: -1, Y: 0}
-
-	CASCADE_NORTH = [3]Coord{
-		OFFSET_WEST,
-		OFFSET_NORTH,
-		OFFSET_EAST,
-	}
-	CASCADE_EAST = [3]Coord{
-		OFFSET_NORTH,
-		OFFSET_EAST,
-		OFFSET_SOUTH,
-	}
-	CASCADE_SOUTH = [3]Coord{
-		OFFSET_EAST,
-		OFFSET_SOUTH,
-		OFFSET_WEST,
-	}
-	CASCADE_WEST = [3]Coord{
-		OFFSET_SOUTH,
-		OFFSET_WEST,
-		OFFSET_NORTH,
 	}
 
 	BOARD_TILES = [16][2]int{

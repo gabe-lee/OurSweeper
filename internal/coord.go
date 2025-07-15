@@ -46,6 +46,20 @@ func (c Coord) Div(other Coord) Coord {
 	}
 }
 
+func (c Coord) AddScalar(val int) Coord {
+	return Coord{
+		X: c.X + val,
+		Y: c.Y + val,
+	}
+}
+
+func (c Coord) SubScalar(val int) Coord {
+	return Coord{
+		X: c.X - val,
+		Y: c.Y - val,
+	}
+}
+
 func (c Coord) MultScalar(val int) Coord {
 	return Coord{
 		X: c.X * val,
@@ -199,18 +213,18 @@ type NearbyCoords struct {
 	Len    int
 }
 
-func (c Coord) GetNearbyCoords(minX, maxX, minY, maxY int) NearbyCoords {
-	near := NearbyCoords{}
-	for i, offset := range NearCoordTable8 {
-		pos := c.Add(offset)
-		if pos.IsInRange(minX, maxX, minY, maxY) {
-			near.Coords[near.Len] = pos
-			near.Bits[near.Len] = NearBitTable8[i]
-			near.Len += 1
-		}
-	}
-	return near
-}
+// func (c Coord) GetNearbyCoords(minX, maxX, minY, maxY int) NearbyCoords {
+// 	near := NearbyCoords{}
+// 	for i, offset := range NearCoordTable8 {
+// 		pos := c.Add(offset)
+// 		if pos.IsInRange(minX, maxX, minY, maxY) {
+// 			near.Coords[near.Len] = pos
+// 			near.Bits[near.Len] = NearBitTable8[i]
+// 			near.Len += 1
+// 		}
+// 	}
+// 	return near
+// }
 
 type Bounds2 struct {
 	TopLeft  Coord

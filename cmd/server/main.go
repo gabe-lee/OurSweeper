@@ -1,15 +1,13 @@
 package main
 
 import (
-	"os"
-
 	App "github.com/gabe-lee/OurSweeper/internal"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
-	w := App.ServerWorld{}
-	w.InitNew(1)
-	// w.DrawNearby(os.Stdout)
-	// w.DrawState(os.Stdout)
-	w.PrintStatus(os.Stdout)
+	db := App.SweepDB{}
+	db.CheckFile()
+	db.Open()
+	defer db.Close()
 }

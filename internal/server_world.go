@@ -175,10 +175,12 @@ func (w *ServerWorld) InitNew(id uint32) {
 			mine := w.initMine(idx, pos)
 			if mine {
 				w.TotalMines += 1
-				nears := pos.GetNearbyCoords(0, WORLD_MAX_X, 0, WORLD_MAX_Y)
-				for _, nearPos := range nears.Coords[:nears.Len] {
-					nearIdx := nearPos.ToIndex(TY_SHIFT)
+				queue := NewCascadeQueue(pos)
+				next, hasMore := queue.NextToCheck()
+				for hasMore {
+					nearIdx := next.Pos.ToIndex(TY_SHIFT)
 					w.Tiles[nearIdx].IncrNearbyMineCount()
+					next, hasMore = queue.NextToCheck()
 				}
 			}
 		} else {
@@ -204,12 +206,11 @@ func (w *ServerWorld) SweepTile(pos Coord) SweepResult {
 	} else {
 		t.SetVizSweptEmpty()
 	}
-	result.InitSweep(pos, w.getScore(pos), t.GetIconServer())
+	result.InitSweep(pos, w.getScore(pos), t.GetIconForClient())
 	if isMine {
 		w.reduceNearbyBombCounts(&result, pos)
 	} else if t.GetNearby() == 0 {
-		casc := w.cascade(&result, pos)
-		result.RelativeBits = casc.DidSweepList
+		w.cascade(&result, pos)
 	}
 	if !isMine {
 		w.SweptTiles.Add(uint32(result.Len))
@@ -233,8 +234,7 @@ func (w *ServerWorld) checkEndState() {
 func (w *ServerWorld) getScore(pos Coord) uint16 {
 	var lowestNearBombChance float64 = RISC_FULL_BLIND
 	var lowestNearBombChanceBombs uint8 = IDX_FULL_BLIND_BASE
-	nearbyCoords := pos.GetNearbyCoords(0, WORLD_MAX_X, 0, WORLD_MAX_Y)
-	for _, nearPos := range nearbyCoords.Coords[:nearbyCoords.Len] {
+	DoActionOn8NearbyCoordsInRange(pos, 0, WORLD_MAX_X, 0, WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
 		nearIdx := nearPos.ToIndex(TY_SHIFT)
 		if w.Tiles[nearIdx].IsSwept() {
 			thisBombChance, thisBombs := w.getBombProbabilityAndNearby(nearPos)
@@ -243,7 +243,7 @@ func (w *ServerWorld) getScore(pos Coord) uint16 {
 				lowestNearBombChanceBombs = thisBombs
 			}
 		}
-	}
+	})
 	scoreFloat := BOMB_NEAR_BASE_SCORE[lowestNearBombChanceBombs]
 	if lowestNearBombChance < 1.0 {
 		exp := RISC_EXPONENT_ADD + (RISC_EXPONENT_MULT * lowestNearBombChance)
@@ -255,61 +255,49 @@ func (w *ServerWorld) getScore(pos Coord) uint16 {
 func (w *ServerWorld) getBombProbabilityAndNearby(pos Coord) (safe float64, near uint8) {
 	var opaques float64
 	bombs := w.Tiles[pos.ToIndex(TY_SHIFT)].GetNearby()
-	nearbyCoords := pos.GetNearbyCoords(0, WORLD_MAX_X, 0, WORLD_MAX_Y)
-	for _, nearPos := range nearbyCoords.Coords[:nearbyCoords.Len] {
+	DoActionOn8NearbyCoordsInRange(pos, 0, WORLD_MAX_X, 0, WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
 		nearIdx := nearPos.ToIndex(TY_SHIFT)
 		if !w.Tiles[nearIdx].IsSwept() {
 			opaques += 1.0
 		}
-	}
+	})
 	return float64(bombs) / opaques, bombs
 }
 
 func (w *ServerWorld) reduceNearbyBombCounts(result *SweepResult, pos Coord) {
-	nearbyCoords := pos.GetNearbyCoords(0, WORLD_MAX_X, 0, WORLD_MAX_Y)
-	for i := range nearbyCoords.Len {
-		nearPos := nearbyCoords.Coords[i]
-		nearBit := nearbyCoords.Bits[i]
-		nearIdx := nearPos.ToIndex(TY_SHIFT)
-		bombs := w.Tiles[nearIdx].GetNearby()
-		w.Tiles[nearIdx].SetNearby(bombs - 1)
-		if w.Tiles[nearIdx].IsSwept() {
-			result.RelativeBits |= nearBit
-			result.AddScoreAndIcon(0, w.Tiles[nearIdx].GetIconServer())
+	DoActionOn8NearbyCoordsInRange(pos, 0, WORLD_MAX_X, 0, WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
+		nextIdx := nearPos.ToIndex(TY_SHIFT)
+		mines := w.Tiles[nextIdx].GetNearby()
+		w.Tiles[nextIdx].SetNearby(mines - 1)
+		if w.Tiles[nextIdx].IsSwept() {
+			result.AddBombUpdate(w.Tiles[nextIdx].GetIconForClient(), nearBit)
 		}
-	}
+	})
 }
 
-func (w *ServerWorld) checkCascade(result *SweepResult, pos Coord) (didSweep, didCascade bool) {
-	if !pos.IsInRange(0, WORLD_MAX_X, 0, WORLD_MAX_Y) {
-		return false, false
+func (w *ServerWorld) checkCascade(result *SweepResult, queue *CascadeQueue, coord CascadeCoord) {
+	if !coord.Pos.IsInRange(0, WORLD_MAX_X, 0, WORLD_MAX_Y) {
+		return
 	}
-	thisIdx := pos.ToIndex(TY_SHIFT)
+	thisIdx := coord.Pos.ToIndex(TY_SHIFT)
 	if w.Tiles[thisIdx].IsSwept() {
-		return false, false
+		return
 	}
 	w.Tiles[thisIdx].SetVizSweptEmpty()
 	if w.Tiles[thisIdx].GetNearby() == 0 {
-		didCascade = true
+		queue.AddCascade(coord)
 	}
-	result.AddScoreAndIcon(uint16(BOMB_NEAR_BASE_SCORE[0]), w.Tiles[thisIdx].GetIconServer())
-	return true, didCascade
+	bit := uint64(1) << coord.RelativeIdx
+	result.AddCascadeSweep(w.Tiles[thisIdx].GetIconForClient(), bit)
 }
 
-func (w *ServerWorld) cascade(result *SweepResult, pos Coord) CascadeQueue {
+func (w *ServerWorld) cascade(result *SweepResult, pos Coord) {
 	queue := NewCascadeQueue(pos)
 	next, moreToCheck := queue.NextToCheck()
 	for moreToCheck {
-		didSweep, didCascade := w.checkCascade(result, next.Pos)
-		if didSweep {
-			queue.AddSweep(next)
-		}
-		if didCascade {
-			queue.AddCascade(next)
-		}
+		w.checkCascade(result, &queue, next)
 		next, moreToCheck = queue.NextToCheck()
 	}
-	return queue
 }
 
 func (w *ServerWorld) PrintStatus(wr io.Writer) {
