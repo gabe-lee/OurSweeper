@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 
+	"github.com/gabe-lee/OurSweeper/coord"
 	"github.com/gabe-lee/OurSweeper/xmath"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -53,7 +54,7 @@ type Input struct {
 // Draw implements ebiten.Game.
 func (g *GameClient) Draw(screen *EbitImage) {
 	for i := range WORLD_TILE_COUNT {
-		tilePos := CoordFromIndex(i, TY_SHIFT, TX_MASK)
+		tilePos := coord.CoordFromIndex(i, TY_SHIFT, TX_MASK)
 		boardPos := tilePos.MultScalar(TILE_SIZE).DivScalar(DISPLAY_SCALE_DOWN)
 		iconIdx := g.World.Tiles[i]
 		iconTopLeft := BOARD_TILES[iconIdx]

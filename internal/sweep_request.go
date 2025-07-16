@@ -34,7 +34,7 @@ func (s *SweepRequest) CodedSerialize(order ByteOrder) (data []byte, err error) 
 
 func NewSweepRequest(pos Coord) SweepRequest {
 	return SweepRequest{
-		Pos: pos.ToByteCoord(),
+		Pos: pos.ToCoordByte(),
 	}
 }
 

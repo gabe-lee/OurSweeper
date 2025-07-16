@@ -1,9 +1,5 @@
 package internal
 
-import (
-	"time"
-)
-
 // const (
 // 	ICON_0      = " "
 // 	ICON_1      = ansi.FG_BLU + "1" + ansi.CLEAR
@@ -28,7 +24,7 @@ type ClientWorld struct {
 	ExplodedMines uint32
 	SweptTiles    uint32
 	Ended         bool
-	Expires       time.Time
+	Expires       int64
 }
 
 // // This is NOT safe for concurrent use when world is being played on,

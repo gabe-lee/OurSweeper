@@ -25,7 +25,7 @@ type SweepResult struct {
 
 func (s *SweepResult) InitSweep(pos Coord, score uint16, icon byte) {
 	s.Score = score
-	s.Center = pos.ToByteCoord()
+	s.Center = pos.ToCoordByte()
 	s.Icons[0] = icon
 	s.Len = 1
 }
@@ -52,7 +52,7 @@ func (s *SweepResult) DoActionOnAllTiles(action func(pos Coord, icon byte)) {
 		return
 	}
 	remainingBits := s.RelativeBits
-	center := s.Center.ToCoord()
+	center := s.Center.ToCoordInt()
 	icon := s.Icons[0] & ICON_MASK
 	action(center, icon)
 	var idx byte = 1
@@ -68,8 +68,6 @@ func (s *SweepResult) DoActionOnAllTiles(action func(pos Coord, icon byte)) {
 		idx += 1
 	}
 }
-
-
 
 // func (s SweepResult) Iter() SweepResultIter {
 // 	return SweepResultIter{

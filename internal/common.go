@@ -7,21 +7,25 @@ import (
 )
 
 const (
-	WORLD_TILE_WIDTH  int = 64
-	WORLD_TILE_HEIGHT int = 64
-	WORLD_MAX_X       int = WORLD_TILE_WIDTH - 1
-	WORLD_MAX_Y       int = WORLD_TILE_HEIGHT - 1
-	WORLD_HALF_WIDTH  int = WORLD_TILE_WIDTH / 2
-	WORLD_HALF_HEIGHT int = WORLD_TILE_HEIGHT / 2
-	WORLD_TILE_COUNT  int = WORLD_TILE_WIDTH * WORLD_TILE_HEIGHT
-	WORLD_LOCK_COUNT  int = 64
-	TILES_PER_LOCK    int = WORLD_TILE_COUNT / WORLD_LOCK_COUNT
-	AXIS_PER_LOCK     int = 8
-	T_TO_L            int = 3 // bits to shift DOWN to turn Tile X or Y into Lock X or Y
-	TY_SHIFT          int = 6 // bits to shift tile `y` value up/down when calculating index
-	LY_SHIFT          int = 3 // bits to shift lock `y` value up/down when calculating index
-	TX_MASK           int = WORLD_TILE_WIDTH - 1
-	LX_MASK           int = AXIS_PER_LOCK - 1
+	WORLD_TILE_WIDTH           int = 64
+	WORLD_TILE_HEIGHT          int = 64
+	WORLD_MAX_X                int = WORLD_TILE_WIDTH - 1
+	WORLD_MAX_Y                int = WORLD_TILE_HEIGHT - 1
+	WORLD_HALF_WIDTH           int = WORLD_TILE_WIDTH / 2
+	WORLD_HALF_HEIGHT          int = WORLD_TILE_HEIGHT / 2
+	WORLD_TILE_COUNT           int = WORLD_TILE_WIDTH * WORLD_TILE_HEIGHT
+	WORLD_TILES_PER_CHUNK_AXIS int = 8
+	WORLD_CHUNK_COUNT          int = WORLD_CHUNK_HEIGHT * WORLD_CHUNK_WIDTH
+	WORLD_CHUNK_WIDTH          int = WORLD_TILE_WIDTH / WORLD_TILES_PER_CHUNK_AXIS
+	WORLD_CHUNK_HEIGHT         int = WORLD_TILE_HEIGHT / WORLD_TILES_PER_CHUNK_AXIS
+	TILES_PER_CHUNK            int = WORLD_TILE_COUNT / WORLD_CHUNK_COUNT
+	CY_SHIFT                   int = 3 // trailing zeros of the square root of TILES_PER_CHUNK
+	CX_MASK                    int = (1 << CY_SHIFT) - 1
+	TILE_TO_LOCK_SHIFT         int = TY_SHIFT - LY_SHIFT // bits to shift DOWN to turn Tile X or Y into Lock X or Y
+	TY_SHIFT                   int = 6                   // bits to shift tile `y` value up/down when calculating index
+	LY_SHIFT                   int = 3                   // bits to shift lock `y` value up/down when calculating index
+	TX_MASK                    int = WORLD_TILE_WIDTH - 1
+	LX_MASK                    int = WORLD_TILES_PER_CHUNK_AXIS - 1
 
 	WORLD_LAST_ROW = WORLD_TILE_COUNT - WORLD_TILE_WIDTH
 
