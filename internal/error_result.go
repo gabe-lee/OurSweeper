@@ -45,7 +45,7 @@ func (s *ServerErrorResult) CodedSerialize(order binary.ByteOrder) (data []byte,
 }
 
 var _ serializer.CodedSerializer = (*ServerErrorResult)(nil)
-var _ serializer.Deserializer = (*ServerErrorResult)(nil)
+var _ serializer.WireReader = (*ServerErrorResult)(nil)
 
 var SERVER_MSG = [msgCountS]string{
 	S_ERR_UNKNOWN_MSG_CODE_FROM_CLIENT: "Unknown ",

@@ -102,7 +102,7 @@ func (s *SweepResult) Deserialize(r io.Reader, order binary.ByteOrder) error {
 }
 
 var _ serializer.CodedSerializer = (*SweepResult)(nil)
-var _ serializer.Deserializer = (*SweepResult)(nil)
+var _ serializer.WireReader = (*SweepResult)(nil)
 
 // type SweepResultIter struct {
 // 	RemainingBits uint64

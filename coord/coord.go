@@ -236,10 +236,10 @@ func (c Coord[T]) ToCoordInt() Coord[int] {
 	}
 }
 
-var _ serializer.Serializer = (*Coord[byte])(nil)
-var _ serializer.Deserializer = (*Coord[byte])(nil)
-var _ serializer.Serializer = (*Coord[int])(nil)
-var _ serializer.Deserializer = (*Coord[int])(nil)
+var _ serializer.WireWriter = (*Coord[byte])(nil)
+var _ serializer.WireReader = (*Coord[byte])(nil)
+var _ serializer.WireWriter = (*Coord[int])(nil)
+var _ serializer.WireReader = (*Coord[int])(nil)
 
 // func (c Coord) GetNearbyCoords(minX, maxX, minY, maxY int) NearbyCoords {
 // 	near := NearbyCoords{}

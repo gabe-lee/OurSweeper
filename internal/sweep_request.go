@@ -39,4 +39,4 @@ func NewSweepRequest(pos Coord) SweepRequest {
 }
 
 var _ serializer.CodedSerializer = (*SweepRequest)(nil)
-var _ serializer.Deserializer = (*SweepRequest)(nil)
+var _ serializer.WireReader = (*SweepRequest)(nil)

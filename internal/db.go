@@ -87,6 +87,7 @@ CREATE TABLE users (
   score_flags INTEGER DEFAULT 0 NOT NULL,
   sweeps INTEGER DEFAULT 0 NOT NULL,
   deaths INTEGER DEFAULT 0 NOT NULL,
+  total_flags INTEGER DEFAULT 0 NOT NULL,
   good_flags INTEGER DEFAULT 0 NOT NULL,
   warnings INTEGER DEFAULT 0 NOT NULL,
   banned INTEGER DEFAULT 0 NOT NULL,
@@ -94,7 +95,8 @@ CREATE TABLE users (
 );
 
 CREATE TABLE anon_users (
-  token INTEGER PRIMARY KEY,
+  uuid_a INTEGER NOT NULL,
+  uuid_b INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
@@ -104,7 +106,8 @@ CREATE TABLE anon_users (
   score_flags INTEGER DEFAULT 0 NOT NULL,
   sweeps INTEGER DEFAULT 0 NOT NULL,
   deaths INTEGER DEFAULT 0 NOT NULL,
-  good_flags INTEGER DEFAULT 0 NOT NULL
+  good_flags INTEGER DEFAULT 0 NOT NULL,
+  PRIMARY KEY (uuid_a, uuid_b)
 );
 
 CREATE TABLE login_tokens (
@@ -424,3 +427,7 @@ func (s *SweepDB) GetActiveWorld(world *ServerWorld, difficulty byte) bool {
 	world.Score.Store(score)
 	return err == nil
 }
+
+const DB_QUERY_CHECK_LOGIN_TOKEN string = `
+SELECT 
+`
