@@ -34,3 +34,6 @@ go.work.sum
 scrap/
 
 sql/sqlite/*
+
+/logs
+/db

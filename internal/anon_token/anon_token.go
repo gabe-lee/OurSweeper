@@ -30,7 +30,7 @@ type AnonToken struct {
 }
 
 // WireRead implements wire.WireReader.
-func (a *AnonToken) WireRead(wire *wire.IncomingWire) error {
+func (a *AnonToken) WireRead(wire *wire.IncomingWire) {
 	wire.TryRead_U64(&a.UUID_A)
 	wire.TryRead_U64(&a.UUID_B)
 	wire.TryRead_I64(&a.Playtime)
@@ -45,11 +45,10 @@ func (a *AnonToken) WireRead(wire *wire.IncomingWire) error {
 	wire.TryRead_U8(&a.ScreenNameLen)
 	dst := a.ScreenName[:a.ScreenNameLen]
 	wire.TryRead_SliceU8(dst)
-	return wire.Err()
 }
 
 // WireWrite implements wire.WireWriter.
-func (a *AnonToken) WireWrite(wire *wire.OutgoingWire) error {
+func (a *AnonToken) WireWrite(wire *wire.OutgoingWire) {
 	wire.TryWrite_U64(a.UUID_A)
 	wire.TryWrite_U64(a.UUID_B)
 	wire.TryWrite_I64(a.Playtime)
@@ -64,7 +63,6 @@ func (a *AnonToken) WireWrite(wire *wire.OutgoingWire) error {
 	wire.TryWrite_U8(a.ScreenNameLen)
 	src := a.ScreenName[:a.ScreenNameLen]
 	wire.TryWrite_SliceU8(src)
-	return wire.Err()
 }
 
 var _ wire.WireWriter = (*AnonToken)(nil)
@@ -75,19 +73,17 @@ type AnonTokenRaw struct {
 }
 
 // WireRead implements wire.WireReader.
-func (a *AnonTokenRaw) WireRead(wire *wire.IncomingWire) error {
+func (a *AnonTokenRaw) WireRead(wire *wire.IncomingWire) {
 	var l uint32
 	wire.TryRead_UVar32(&l)
 	a.Token = make([]byte, 0, l)
 	wire.TryRead_SliceU8(a.Token)
-	return wire.Err()
 }
 
 // WireWrite implements wire.WireWriter.
-func (a *AnonTokenRaw) WireWrite(wire *wire.OutgoingWire) error {
+func (a *AnonTokenRaw) WireWrite(wire *wire.OutgoingWire) {
 	wire.TryWrite_UVar32(uint32(len(a.Token)))
 	wire.TryWrite_SliceU8(a.Token)
-	return wire.Err()
 }
 
 var _ wire.WireWriter = (*AnonTokenRaw)(nil)

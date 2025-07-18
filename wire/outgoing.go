@@ -2,7 +2,10 @@ package wire
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
+	"reflect"
 	"unsafe"
 )
 
@@ -40,6 +43,20 @@ func (w *OutgoingWire) HasErr() bool {
 	return w.err != nil
 }
 
+func (w *OutgoingWire) AddErr(err error) {
+	if err != nil {
+		if w.err == nil {
+			w.err = err
+		} else {
+			w.err = errors.Join(w.err, err)
+		}
+	}
+}
+
+func (w *OutgoingWire) ClearErrs() {
+	w.err = nil
+}
+
 func (w *OutgoingWire) GetOrder() Order {
 	return w.bin
 }
@@ -59,6 +76,10 @@ func (w *OutgoingWire) TryWrite_U8(val uint8) {
 }
 
 func (w *OutgoingWire) TryWrite_I8(val int8) {
+	w.TryWrite_U8(*(*uint8)(unsafe.Pointer(&val)))
+}
+
+func (w *OutgoingWire) TryWrite_Bool(val bool) {
 	w.TryWrite_U8(*(*uint8)(unsafe.Pointer(&val)))
 }
 
@@ -182,7 +203,7 @@ func (w *OutgoingWire) TryWrite_WireWriter(val WireWriter) {
 	if w.err != nil {
 		return
 	}
-	w.err = val.WireWrite(w)
+	val.WireWrite(w)
 }
 
 func (w *OutgoingWire) TryWrite_SliceU8(slice []uint8) {
@@ -195,6 +216,12 @@ func (w *OutgoingWire) TryWrite_SliceU8(slice []uint8) {
 }
 
 func (w *OutgoingWire) TryWrite_SliceI8(slice []int8) {
+	uptr := (*uint8)(unsafe.Pointer(unsafe.SliceData(slice)))
+	uslice := unsafe.Slice(uptr, len(slice))
+	w.TryWrite_SliceU8(uslice)
+}
+
+func (w *OutgoingWire) TryWrite_SliceBool(slice []bool) {
 	uptr := (*uint8)(unsafe.Pointer(unsafe.SliceData(slice)))
 	uslice := unsafe.Slice(uptr, len(slice))
 	w.TryWrite_SliceU8(uslice)
@@ -331,6 +358,140 @@ func (w *OutgoingWire) TryWrite_SliceWireWriter(slice []WireWriter) {
 		if w.err != nil {
 			return
 		}
-		w.err = slice[i].WireWrite(w)
+		slice[i].WireWrite(w)
+	}
+}
+
+func (w *OutgoingWire) TryWrite_Auto(val any) {
+	if w.err != nil {
+		return
+	}
+	switch T := val.(type) {
+	case bool:
+		w.TryWrite_Bool(T)
+	case int8:
+		w.TryWrite_I8(T)
+	case uint8:
+		w.TryWrite_U8(T)
+	case int16:
+		w.TryWrite_I16(T)
+	case uint16:
+		w.TryWrite_U16(T)
+	case int32:
+		w.TryWrite_I32(T)
+	case uint32:
+		w.TryWrite_U32(T)
+	case int64:
+		w.TryWrite_I64(T)
+	case uint64:
+		w.TryWrite_U64(T)
+	case float32:
+		w.TryWrite_F32(T)
+	case float64:
+		w.TryWrite_F64(T)
+	case []bool:
+		w.TryWrite_SliceBool(T)
+	case []int8:
+		w.TryWrite_SliceI8(T)
+	case []uint8:
+		w.TryWrite_SliceU8(T)
+	case []int16:
+		w.TryWrite_SliceI16(T)
+	case []uint16:
+		w.TryWrite_SliceU16(T)
+	case []int32:
+		w.TryWrite_SliceI32(T)
+	case []uint32:
+		w.TryWrite_SliceU32(T)
+	case []int64:
+		w.TryWrite_SliceI64(T)
+	case []uint64:
+		w.TryWrite_SliceU64(T)
+	case []float32:
+		w.TryWrite_SliceF32(T)
+	case []float64:
+		w.TryWrite_SliceF64(T)
+	default:
+		TT := reflect.TypeOf(T)
+		if TT.Implements(reflect.TypeFor[WireWriter]()) {
+			I := *(*WireWriter)(unsafe.Pointer(&T))
+			w.TryWrite_WireWriter(I)
+			return
+		}
+		if TT.Kind() == reflect.Slice {
+			TTT := TT.Elem()
+			if TTT.Implements(reflect.TypeFor[WireWriter]()) {
+				ISlice := *(*[]WireWriter)(unsafe.Pointer(&T))
+				w.TryWrite_SliceWireWriter(ISlice)
+			}
+		}
+		w.err = fmt.Errorf("invalid type `%s` for TryWrite_Auto: not a primitive type and does not implement WireWriter", TT.Name())
+	}
+}
+
+func (w *OutgoingWire) TryWrite_AutoVarint(val any) {
+	if w.err != nil {
+		return
+	}
+	switch T := val.(type) {
+	case bool:
+		w.TryWrite_Bool(T)
+	case int8:
+		w.TryWrite_I8(T)
+	case uint8:
+		w.TryWrite_U8(T)
+	case int16:
+		w.TryWrite_IVar16(T)
+	case uint16:
+		w.TryWrite_UVar16(T)
+	case int32:
+		w.TryWrite_IVar32(T)
+	case uint32:
+		w.TryWrite_UVar32(T)
+	case int64:
+		w.TryWrite_IVar64(T)
+	case uint64:
+		w.TryWrite_UVar64(T)
+	case float32:
+		w.TryWrite_F32(T)
+	case float64:
+		w.TryWrite_F64(T)
+	case []bool:
+		w.TryWrite_SliceBool(T)
+	case []int8:
+		w.TryWrite_SliceI8(T)
+	case []uint8:
+		w.TryWrite_SliceU8(T)
+	case []int16:
+		w.TryWrite_SliceIVar16(T)
+	case []uint16:
+		w.TryWrite_SliceUVar16(T)
+	case []int32:
+		w.TryWrite_SliceIVar32(T)
+	case []uint32:
+		w.TryWrite_SliceUVar32(T)
+	case []int64:
+		w.TryWrite_SliceIVar64(T)
+	case []uint64:
+		w.TryWrite_SliceUVar64(T)
+	case []float32:
+		w.TryWrite_SliceF32(T)
+	case []float64:
+		w.TryWrite_SliceF64(T)
+	default:
+		TT := reflect.TypeOf(T)
+		if TT.Implements(reflect.TypeFor[WireWriter]()) {
+			I := *(*WireWriter)(unsafe.Pointer(&T))
+			w.TryWrite_WireWriter(I)
+			return
+		}
+		if TT.Kind() == reflect.Slice {
+			TTT := TT.Elem()
+			if TTT.Implements(reflect.TypeFor[WireWriter]()) {
+				ISlice := *(*[]WireWriter)(unsafe.Pointer(&T))
+				w.TryWrite_SliceWireWriter(ISlice)
+			}
+		}
+		w.err = fmt.Errorf("invalid type `%s` for TryWrite_AutoVarint: not a primitive type and does not implement WireWriter", TT.Name())
 	}
 }

@@ -1,12 +1,14 @@
 package coord
 
 import (
-	"encoding/binary"
 	"fmt"
-	"io"
 
-	"github.com/gabe-lee/OurSweeper/serializer"
-	"github.com/gabe-lee/OurSweeper/utils"
+	"github.com/gabe-lee/OurSweeper/wire"
+)
+
+type (
+	IncomingWire = wire.IncomingWire
+	OutgoingWire = wire.OutgoingWire
 )
 
 type number interface {
@@ -209,18 +211,14 @@ func (c Coord[T]) String() string {
 	return fmt.Sprintf("(%d, %d)", c.X, c.Y)
 }
 
-func (c *Coord[T]) Deserialize(r io.Reader, order binary.ByteOrder) error {
-	var e utils.ErrorCollector
-	e.Do(binary.Read(r, order, &c.X))
-	e.Do(binary.Read(r, order, &c.Y))
-	return e.Err
+func (c *Coord[T]) WireRead(w *IncomingWire) {
+	w.TryRead_Auto(&c.X)
+	w.TryRead_Auto(&c.Y)
 }
 
-func (c *Coord[T]) Serialize(w io.Writer, order binary.ByteOrder) error {
-	var e utils.ErrorCollector
-	e.Do(binary.Write(w, order, c.X))
-	e.Do(binary.Write(w, order, c.Y))
-	return e.Err
+func (c *Coord[T]) WireWrite(w *wire.OutgoingWire) {
+	w.TryWrite_Auto(c.X)
+	w.TryWrite_Auto(c.Y)
 }
 
 func (c Coord[T]) ToCoordByte() Coord[byte] {
@@ -236,10 +234,10 @@ func (c Coord[T]) ToCoordInt() Coord[int] {
 	}
 }
 
-var _ serializer.WireWriter = (*Coord[byte])(nil)
-var _ serializer.WireReader = (*Coord[byte])(nil)
-var _ serializer.WireWriter = (*Coord[int])(nil)
-var _ serializer.WireReader = (*Coord[int])(nil)
+var _ wire.WireWriter = (*Coord[byte])(nil)
+var _ wire.WireReader = (*Coord[byte])(nil)
+var _ wire.WireWriter = (*Coord[int])(nil)
+var _ wire.WireReader = (*Coord[int])(nil)
 
 // func (c Coord) GetNearbyCoords(minX, maxX, minY, maxY int) NearbyCoords {
 // 	near := NearbyCoords{}

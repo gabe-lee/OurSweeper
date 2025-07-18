@@ -4,12 +4,16 @@ import "errors"
 
 type WireReader interface {
 	// Read the serialized type data from the provided IncomingWire
-	WireRead(wire *IncomingWire) error
+	//
+	// Any Errors should be attatched to the `IncomingWire`
+	WireRead(wire *IncomingWire)
 }
 
 type WireWriter interface {
 	// Write the serialized type data into the provided OutgoingWire
-	WireWrite(wire *OutgoingWire) error
+	//
+	// Any Errors should be attatched to the `IncomingWire`
+	WireWrite(wire *OutgoingWire)
 }
 
 var ErrVarintOverflow64 = errors.New("reading varint causes overflow of target 64-bit integer")

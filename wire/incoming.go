@@ -2,7 +2,10 @@ package wire
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
+	"reflect"
 	"unsafe"
 )
 
@@ -38,6 +41,20 @@ func (w *IncomingWire) HasErr() bool {
 	return w.err != nil
 }
 
+func (w *IncomingWire) AddErr(err error) {
+	if err != nil {
+		if w.err == nil {
+			w.err = err
+		} else {
+			w.err = errors.Join(w.err, err)
+		}
+	}
+}
+
+func (w *IncomingWire) ClearErrs() {
+	w.err = nil
+}
+
 func (w *IncomingWire) GetOrder() Order {
 	return w.bin
 }
@@ -57,6 +74,10 @@ func (w *IncomingWire) TryRead_U8(ptr *uint8) {
 }
 
 func (w *IncomingWire) TryRead_I8(ptr *int8) {
+	w.TryRead_U8((*uint8)(unsafe.Pointer(ptr)))
+}
+
+func (w *IncomingWire) TryRead_Bool(ptr *bool) {
 	w.TryRead_U8((*uint8)(unsafe.Pointer(ptr)))
 }
 
@@ -209,11 +230,11 @@ func (w *IncomingWire) TryRead_IVar64(ptr *int64) {
 	w.TryRead_UVar64((*uint64)(unsafe.Pointer(ptr)))
 }
 
-func (w *IncomingWire) TryRead_WireReader(x WireReader) {
+func (w *IncomingWire) TryRead_WireReader(impl WireReader) {
 	if w.err != nil {
 		return
 	}
-	w.err = x.WireRead(w)
+	impl.WireRead(w)
 }
 
 func (w *IncomingWire) TryRead_SliceU8(slice []uint8) {
@@ -226,6 +247,12 @@ func (w *IncomingWire) TryRead_SliceU8(slice []uint8) {
 }
 
 func (w *IncomingWire) TryRead_SliceI8(slice []int8) {
+	uptr := (*uint8)(unsafe.Pointer(unsafe.SliceData(slice)))
+	uslice := unsafe.Slice(uptr, len(slice))
+	w.TryRead_SliceU8(uslice)
+}
+
+func (w *IncomingWire) TryRead_SliceBool(slice []bool) {
 	uptr := (*uint8)(unsafe.Pointer(unsafe.SliceData(slice)))
 	uslice := unsafe.Slice(uptr, len(slice))
 	w.TryRead_SliceU8(uslice)
@@ -362,7 +389,140 @@ func (w *IncomingWire) TryRead_SliceWireReader(slice []WireReader) {
 		if w.err != nil {
 			return
 		}
-		w.err = slice[i].WireRead(w)
+		slice[i].WireRead(w)
+	}
+}
 
+func (w *IncomingWire) TryRead_Auto(val any) {
+	if w.err != nil {
+		return
+	}
+	switch T := val.(type) {
+	case *bool:
+		w.TryRead_Bool(T)
+	case *int8:
+		w.TryRead_I8(T)
+	case *uint8:
+		w.TryRead_U8(T)
+	case *int16:
+		w.TryRead_I16(T)
+	case *uint16:
+		w.TryRead_U16(T)
+	case *int32:
+		w.TryRead_I32(T)
+	case *uint32:
+		w.TryRead_U32(T)
+	case *int64:
+		w.TryRead_I64(T)
+	case *uint64:
+		w.TryRead_U64(T)
+	case *float32:
+		w.TryRead_F32(T)
+	case *float64:
+		w.TryRead_F64(T)
+	case []bool:
+		w.TryRead_SliceBool(T)
+	case []int8:
+		w.TryRead_SliceI8(T)
+	case []uint8:
+		w.TryRead_SliceU8(T)
+	case []int16:
+		w.TryRead_SliceI16(T)
+	case []uint16:
+		w.TryRead_SliceU16(T)
+	case []int32:
+		w.TryRead_SliceI32(T)
+	case []uint32:
+		w.TryRead_SliceU32(T)
+	case []int64:
+		w.TryRead_SliceI64(T)
+	case []uint64:
+		w.TryRead_SliceU64(T)
+	case []float32:
+		w.TryRead_SliceF32(T)
+	case []float64:
+		w.TryRead_SliceF64(T)
+	default:
+		TT := reflect.TypeOf(T)
+		if TT.Implements(reflect.TypeFor[WireReader]()) {
+			I := *(*WireReader)(unsafe.Pointer(&T))
+			w.TryRead_WireReader(I)
+			return
+		}
+		if TT.Kind() == reflect.Slice {
+			TTT := TT.Elem()
+			if TTT.Implements(reflect.TypeFor[WireReader]()) {
+				ISlice := *(*[]WireReader)(unsafe.Pointer(&T))
+				w.TryRead_SliceWireReader(ISlice)
+			}
+		}
+		w.err = fmt.Errorf("invalid type `%s` for TryRead_Auto: not a pointer to a primitive type and does not implement WireReader", TT.Name())
+	}
+}
+
+func (w *IncomingWire) TryRead_AutoVarint(val any) {
+	if w.err != nil {
+		return
+	}
+	switch T := val.(type) {
+	case *bool:
+		w.TryRead_Bool(T)
+	case *int8:
+		w.TryRead_I8(T)
+	case *uint8:
+		w.TryRead_U8(T)
+	case *int16:
+		w.TryRead_IVar16(T)
+	case *uint16:
+		w.TryRead_UVar16(T)
+	case *int32:
+		w.TryRead_IVar32(T)
+	case *uint32:
+		w.TryRead_UVar32(T)
+	case *int64:
+		w.TryRead_IVar64(T)
+	case *uint64:
+		w.TryRead_UVar64(T)
+	case *float32:
+		w.TryRead_F32(T)
+	case *float64:
+		w.TryRead_F64(T)
+	case []bool:
+		w.TryRead_SliceBool(T)
+	case []int8:
+		w.TryRead_SliceI8(T)
+	case []uint8:
+		w.TryRead_SliceU8(T)
+	case []int16:
+		w.TryRead_SliceIVar16(T)
+	case []uint16:
+		w.TryRead_SliceUVar16(T)
+	case []int32:
+		w.TryRead_SliceIVar32(T)
+	case []uint32:
+		w.TryRead_SliceUVar32(T)
+	case []int64:
+		w.TryRead_SliceIVar64(T)
+	case []uint64:
+		w.TryRead_SliceUVar64(T)
+	case []float32:
+		w.TryRead_SliceF32(T)
+	case []float64:
+		w.TryRead_SliceF64(T)
+	default:
+		TT := reflect.TypeOf(T)
+		if TT.Implements(reflect.TypeFor[WireReader]()) {
+			I := *(*WireReader)(unsafe.Pointer(&T))
+			w.TryRead_WireReader(I)
+			return
+		}
+		if TT.Kind() == reflect.Slice {
+			TTT := TT.Elem()
+			if TTT.Implements(reflect.TypeFor[WireReader]()) {
+				ISlice := *(*[]WireReader)(unsafe.Pointer(&T))
+				w.TryRead_SliceWireReader(ISlice)
+			}
+		}
+		w.err = fmt.Errorf("invalid type `%s` for TryRead_Auto: not a pointer to a primitive type and does not implement WireReader", TT.Name())
 	}
 }
