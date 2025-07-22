@@ -1,6 +1,16 @@
 package utils
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/gabe-lee/OurSweeper/data_buffer"
+)
+
+type (
+	StringBuffer = data_buffer.WriteBuffer
+)
 
 type ErrorChecker struct {
 	Err error
@@ -29,6 +39,91 @@ func (e *ErrorCollector) Do(err error) {
 	e.Err = errors.Join(e.Err, err)
 }
 
+func (e *ErrorCollector) Add(err error) {
+	e.Err = errors.Join(e.Err, err)
+}
+
+func (e *ErrorCollector) AddFmt(format string, args ...any) {
+	e.Err = errors.Join(e.Err, fmt.Errorf(format, args...))
+}
+
+type ErrorBuffer struct {
+	strBuf StringBuffer
+	writer io.Writer
+}
+
+func NewErrorBuffer(writer io.Writer, initCap int) ErrorBuffer {
+	return ErrorBuffer{
+		strBuf: data_buffer.NewWriteBuffer(initCap),
+		writer: writer,
+	}
+}
+
+func (eb *ErrorBuffer) addLine() {
+	eb.strBuf.WriteBytes('\n', ' ', 0xE2, 0x86, 0xB3, ' ') // ↳
+}
+
+func (eb *ErrorBuffer) IfErrAddErr(err error) {
+	if err != nil {
+		eb.addLine()
+		eb.strBuf.WriteString(err.Error())
+	}
+}
+
+func (eb *ErrorBuffer) IfErrAddErrWithStr(err error, format string, args ...any) {
+	if err != nil {
+		eb.addLine()
+		eb.strBuf.WriteString(err.Error())
+		eb.addLine()
+		fmt.Fprintf(&eb.strBuf, format, args...)
+	}
+}
+
+func (eb *ErrorBuffer) AddStr(format string, args ...any) {
+	eb.addLine()
+	fmt.Fprintf(&eb.strBuf, format, args...)
+}
+
+func (eb *ErrorBuffer) BytesRef() []byte {
+	return eb.strBuf.BytesRef()
+}
+
+func (eb *ErrorBuffer) BytesCopy() []byte {
+	return eb.strBuf.BytesCopy()
+}
+
+func (eb *ErrorBuffer) StringCopy() string {
+	return eb.strBuf.StringCopy()
+}
+
+func (eb *ErrorBuffer) Error() string {
+	return eb.strBuf.StringCopy()
+}
+
+func (eb *ErrorBuffer) Clear() {
+	eb.strBuf.Reset()
+}
+
+func (eb *ErrorBuffer) Flush(prefix string) {
+	if eb.Len() > 0 {
+		eb.writer.Write([]byte(prefix))
+		eb.writer.Write(eb.strBuf.BytesRef())
+		eb.strBuf.Reset()
+	}
+}
+
+func (eb *ErrorBuffer) Len() int {
+	return eb.strBuf.Len()
+}
+
+func (eb *ErrorBuffer) Cap() int {
+	return eb.strBuf.Cap()
+}
+
+func (eb *ErrorBuffer) EnsureSpace(space int) {
+	eb.strBuf.EnsureSpace(space)
+}
+
 var QuickItoA = [100]string{
 	"00", "01", "02", "03", "04", "05", "06", "07", "08", "09",
 	"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
@@ -42,7 +137,61 @@ var QuickItoA = [100]string{
 	"90", "91", "92", "93", "94", "95", "96", "97", "98", "99",
 }
 
-var QuickItoX = [16]byte{
+var quickItoX = [16]byte{
 	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
 	'A', 'B', 'C', 'D', 'E', 'F',
+}
+
+var quickXtoI = [...]byte{
+	'0': 0,
+	'1': 1,
+	'2': 2,
+	'3': 3,
+	'4': 4,
+	'5': 5,
+	'6': 6,
+	'7': 7,
+	'8': 8,
+	'9': 9,
+	'A': 10,
+	'B': 11,
+	'C': 12,
+	'D': 13,
+	'E': 14,
+	'F': 15,
+}
+
+func QuickIntToHexString(val uint64) (hexStr [16]byte, firstNonzeroChar int) {
+	i := 15
+	firstNonzeroChar = 15
+	for i >= 0 {
+		char := quickItoX[val&0b1111]
+		hexStr[i] = char
+		if char != '0' {
+			firstNonzeroChar = i
+		}
+		val >>= 4
+		i -= 1
+	}
+	return
+}
+
+func QuickHexStringToInt(hexStr string) uint64 {
+	var val uint64
+	i := 0
+	for i < len(hexStr) {
+		val <<= 4
+		char := hexStr[i]
+		if char >= '0' && char <= '9' {
+			val |= uint64(char - '0')
+		} else if char >= 'A' && char <= 'F' {
+			val |= uint64(char - 'A')
+		} else if char >= 'a' && char <= 'a' {
+			val |= uint64(char - 'a')
+		} else {
+			return val
+		}
+		i += 1
+	}
+	return val
 }

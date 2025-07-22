@@ -158,7 +158,7 @@ func (g *GameClient) Update() error {
 			case msg := <-g.RecieveMessages:
 				w := wire.NewIncomingSlice(msg, wire.LE)
 				var msgCode uint32
-				w.TryRead_U32(&msgCode)
+				w.U32(&msgCode)
 				switch msgCode {
 				case MSG.SERVER_SWEEP:
 					var sweep SweepResult

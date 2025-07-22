@@ -65,21 +65,21 @@ func (s *SweepResult) DoActionOnAllTiles(action func(pos Coord, icon byte)) {
 	}
 }
 
-func (s *SweepResult) WireWrite(w *wire.OutgoingWire) {
-	w.TryWrite_U16(s.Score)
+func (s *SweepResult) WireWrite(w *wire.Outgoing) {
+	w.U16(s.Score)
 	s.Center.WireWrite(w)
-	w.TryWrite_U64(s.RelativeBits)
-	w.TryWrite_U8(s.Len)
+	w.U64(s.RelativeBits)
+	w.U8(s.Len)
 	iconLen := (s.Len + 1) >> 1
-	w.TryWrite_SliceU8(s.Icons[:iconLen])
+	w.U8_Slice(s.Icons[:iconLen])
 }
-func (s *SweepResult) WireRead(w *wire.IncomingWire) {
-	w.TryRead_U16(&s.Score)
+func (s *SweepResult) WireRead(w *wire.Incoming) {
+	w.U16(&s.Score)
 	s.Center.WireRead(w)
-	w.TryRead_U64(&s.RelativeBits)
-	w.TryRead_U8(&s.Len)
+	w.U64(&s.RelativeBits)
+	w.U8(&s.Len)
 	iconLen := (s.Len + 1) >> 1
-	w.TryRead_SliceU8(s.Icons[:iconLen])
+	w.U8_Slice(s.Icons[:iconLen])
 }
 
 var _ wire.WireReader = (*SweepResult)(nil)

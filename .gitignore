@@ -37,3 +37,7 @@ sql/sqlite/*
 
 /logs
 /db
+
+# TLS
+server_tls.crt
+server_tls.key

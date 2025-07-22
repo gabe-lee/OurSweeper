@@ -4,35 +4,38 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"os"
-	"path/filepath"
+	"path"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/gabe-lee/OurSweeper/attempt_group"
 	"github.com/gabe-lee/OurSweeper/coord"
+	"github.com/gabe-lee/OurSweeper/env_loader"
 	"github.com/gabe-lee/OurSweeper/internal/common"
 	"github.com/gabe-lee/OurSweeper/logger"
 )
 
 type (
-	Time         = time.Time
-	AttemptGroup = attempt_group.AttemptGroup
-	Timeout      = attempt_group.Timeout
-	Logger       = logger.Logger
-	SubLogger    = logger.SubLogger
-	ServerWorld  = common.ServerWorld
-	Tile         = common.Tile
+	Time            = time.Time
+	AttemptGroup    = attempt_group.AttemptGroup
+	Timeout         = attempt_group.Timeout
+	Logger          = logger.Logger
+	SubLogger       = logger.SubLogger
+	SubLoggerWriter = logger.SubLoggerWriter
+	ServerWorld     = common.ServerWorld
+	Tile            = common.Tile
 )
 
 const (
-	SQL_DIR    string = "sql"
-	SQLITE_DIR string = "sqlite"
-	DB_NAME    string = "our_sweeper.db"
-	DB_PERMS   int    = 0755
+	DB_PERMS int = 0755
 )
+
+type SweepDbEnv struct {
+	DbDir  string `env:"DATABASE_DIR" default:"db"`
+	DbName string `env:"DATABASE_NAME" default:"our_sweeper.db"`
+}
 
 const (
 	DB_EXEC_CREATE_PROP_TABLE_IF_NEEDED string = `
@@ -168,39 +171,39 @@ CREATE TABLE chunks (
 );`,
 }
 
-var DB_DIR = filepath.Join(SQL_DIR, SQLITE_DIR)
-var DB_PATH = filepath.Join(SQL_DIR, SQLITE_DIR, DB_NAME)
-
 type SweepDB struct {
-	Db        *sql.DB
-	WriteLock sync.Mutex
+	db        *sql.DB
+	writeLock sync.Mutex
 	Ver       int64
-	Log       SubLogger
+	log       SubLogger
+	logWriter SubLoggerWriter
+	env       SweepDbEnv
 }
 
 func NewSweepDB(masterLogger *Logger) SweepDB {
+	log := masterLogger.NewSubLogger("Database")
+	logWriter := log.NewSubLoggerWriter(logger.ERROR)
+	env := SweepDbEnv{}
+	env_loader.LoadAndFill(&env, &logWriter)
 	return SweepDB{
-		Log: masterLogger.NewSubLogger("Database"),
+		log:       masterLogger.NewSubLogger("Database"),
+		logWriter: logWriter,
+		env:       env,
 	}
 }
 
-func (*SweepDB) CheckFile() {
-	err := os.MkdirAll(DB_DIR, os.ModeDir|0755)
+func (s *SweepDB) CheckFile() {
+	full := path.Join(s.env.DbDir, s.env.DbName)
+	err := os.MkdirAll(s.env.DbDir, os.ModeDir|0755)
+	s.log.FatalIfErr(err, "could not find/create database directory '%s'", s.env.DbDir)
+	_, err = os.Stat(full)
 	if err != nil {
-		log.Fatalf("could not find/create database directory '%s': %s", DB_DIR, err)
-	}
-	_, err = os.Stat(DB_PATH)
-	if err != nil {
-		file, err := os.Create(DB_PATH)
+		file, err := os.Create(full)
+		s.log.FatalIfErr(err, "unable to create database file '%s'", s.env.DbDir)
 		defer func() {
 			err := file.Close()
-			if err != nil {
-				log.Fatalf("unable to close database file '%s': %s", DB_PATH, err)
-			}
+			s.log.WarnIfErr(err, "unable to close database file '%s'", s.env.DbDir)
 		}()
-		if err != nil {
-			log.Fatalf("unable to create database file '%s': %s", DB_PATH, err)
-		}
 	}
 }
 
@@ -211,44 +214,46 @@ PRAGMA cache = shared;
 PRAGMA temp_store = memory;`
 
 func (s *SweepDB) Open() {
-	d, err := sql.Open("sqlite", DB_PATH)
-	s.Log.FatalIfErr(err, "could not open database '%s'", DB_PATH)
-	s.Db = d
-	s.Db.SetMaxOpenConns(256)
-	s.Db.SetMaxIdleConns(64)
-	s.Db.SetConnMaxIdleTime(time.Second * 60)
-	_, err = s.Db.Exec(DB_EXEC_OPEN_SETTINGS)
-	s.Log.WarnIfErr(err, "could not set database settings: %s", DB_EXEC_OPEN_SETTINGS)
-	_, err = s.Db.Exec(DB_EXEC_CREATE_PROP_TABLE_IF_NEEDED)
-	s.Log.FatalIfErr(err, "could not create or verify the 'props' table in database")
+	full := path.Join(s.env.DbDir, s.env.DbName)
+	d, err := sql.Open("sqlite", full)
+	s.log.FatalIfErr(err, "could not open database '%s'", full)
+	s.db = d
+	s.db.SetMaxOpenConns(256)
+	s.db.SetMaxIdleConns(64)
+	s.db.SetConnMaxIdleTime(time.Second * 60)
+	_, err = s.db.Exec(DB_EXEC_OPEN_SETTINGS)
+	s.log.WarnIfErr(err, "could not set database settings: %s", DB_EXEC_OPEN_SETTINGS)
+	_, err = s.db.Exec(DB_EXEC_CREATE_PROP_TABLE_IF_NEEDED)
+	s.log.FatalIfErr(err, "could not create or verify the 'props' table in database")
 	ver, err := s.GetPropNum(DB_PROP_VER_CURRENT)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			_, err = s.Db.Exec(DB_EXEC_DROP_ALL)
-			s.Log.FatalIfErr(err, "unable to drop all database tables")
+			_, err = s.db.Exec(DB_EXEC_DROP_ALL)
+			s.log.FatalIfErr(err, "unable to drop all database tables")
 			err = s.SetPropNum(DB_PROP_VER_CURRENT, 0)
-			s.Log.FatalIfErr(err, "unable to initialize database 'version' property to 0")
+			s.log.FatalIfErr(err, "unable to initialize database 'version' property to 0")
 		} else {
-			s.Log.FatalIfErr(err, "unable to read the 'db version' property from the database")
+			s.log.FatalIfErr(err, "unable to read the 'db version' property from the database")
 		}
 	}
 	if int64(ver) < int64(DB_VER_COUNT) {
 		for int64(ver) < int64(DB_VER_COUNT) {
 			mig := UP_MIGRATIONS[ver]
-			_, err = s.Db.Exec(mig)
+			_, err = s.db.Exec(mig)
 			ver += 1
-			s.Log.FatalIfErr(err, "unable to perform UP migration VER %d -> %d", ver-1, ver)
+			s.log.FatalIfErr(err, "unable to perform UP migration VER %d -> %d", ver-1, ver)
 		}
 		err = s.SetPropNum(DB_PROP_VER_CURRENT, ver)
-		s.Log.FatalIfErr(err, "unable to set database version property")
+		s.log.FatalIfErr(err, "unable to set database version property")
 	}
 	s.Ver = int64(ver)
 }
 
 func (s *SweepDB) Close() {
-	err := s.Db.Close()
-	s.Log.WarnIfErr(err, "failed to close database")
-	s.Db = nil
+	err := s.db.Close()
+	s.log.WarnIfErr(err, "failed to close database")
+	s.log.Close()
+	s.db = nil
 	s.Ver = 0
 }
 
@@ -259,10 +264,10 @@ WHERE id=$1;`
 
 func (s *SweepDB) GetPropNum(code int) (int, error) {
 	timeout := attempt_group.NewTimeout(time.Second * 5)
-	row := s.Db.QueryRowContext(timeout, DB_QUERY_GET_PROP_NUM, code)
+	row := s.db.QueryRowContext(timeout, DB_QUERY_GET_PROP_NUM, code)
 	var val int
 	err := row.Scan(&val)
-	s.Log.WarnIfErr(err, "could not read property '%s' integer value from database", PROP_NAMES[code])
+	s.log.WarnIfErr(err, "could not read property '%s' integer value from database", PROP_NAMES[code])
 	return val, err
 }
 
@@ -273,10 +278,10 @@ WHERE id=$1;`
 
 func (s *SweepDB) GetPropStr(code int) (string, error) {
 	timeout := attempt_group.NewTimeout(time.Second * 5)
-	row := s.Db.QueryRowContext(timeout, DB_QUERY_GET_PROP_NUM, code)
+	row := s.db.QueryRowContext(timeout, DB_QUERY_GET_PROP_NUM, code)
 	var val string
 	err := row.Scan(&val)
-	s.Log.WarnIfErr(err, "could not read property '%s' string value from database", PROP_NAMES[code])
+	s.log.WarnIfErr(err, "could not read property '%s' string value from database", PROP_NAMES[code])
 	return val, err
 }
 
@@ -287,8 +292,8 @@ ON CONFLICT (id) DO UPDATE SET int=$2;`
 
 func (s *SweepDB) SetPropNum(code int, num int) error {
 	timeout := attempt_group.NewTimeout(time.Second * 5)
-	_, err := s.Db.ExecContext(timeout, DB_QUERY_SET_PROP_NUM, code, num)
-	s.Log.WarnIfErr(err, "could not set property '%s' val %d to database", PROP_NAMES[code], num)
+	_, err := s.db.ExecContext(timeout, DB_QUERY_SET_PROP_NUM, code, num)
+	s.log.WarnIfErr(err, "could not set property '%s' val %d to database", PROP_NAMES[code], num)
 	return err
 }
 
@@ -299,8 +304,8 @@ ON CONFLICT (id) DO UPDATE SET str=$2;`
 
 func (s *SweepDB) SetPropStr(code int, str string) error {
 	timeout := attempt_group.NewTimeout(time.Second * 5)
-	_, err := s.Db.ExecContext(timeout, DB_QUERY_SET_PROP_STR, code, str)
-	s.Log.WarnIfErr(err, "could not set prop '%s' val '%s' to database", PROP_NAMES[code], str)
+	_, err := s.db.ExecContext(timeout, DB_QUERY_SET_PROP_STR, code, str)
+	s.log.WarnIfErr(err, "could not set prop '%s' val '%s' to database", PROP_NAMES[code], str)
 	return err
 }
 
@@ -314,16 +319,16 @@ func (s *SweepDB) CreateNewWorld(world *ServerWorld, difficulty byte) {
 	expires := timeGo.Add(time.Hour * 24).Unix()
 	var seed_a uint64 = *(*uint64)(unsafe.Pointer(&created))
 	var seed_b uint64 = *(*uint64)(unsafe.Pointer(&expires))
-	worldRow := s.Db.QueryRow(DB_QUERY_CREATE_WORLD, seed_a, seed_b, difficulty, created, expires, expires)
+	worldRow := s.db.QueryRow(DB_QUERY_CREATE_WORLD, seed_a, seed_b, difficulty, created, expires, expires)
 	var worldId uint32
 	err := worldRow.Scan(&worldId)
-	s.Log.FatalIfErr(err, "unable to create new world")
+	s.log.FatalIfErr(err, "unable to create new world")
 	world.InitNew(worldId, difficulty, expires, seed_a, seed_b)
 	result := attempt_group.NewWithTimeout("create chunks for new world", time.Second*10, int64(common.WORLD_CHUNK_COUNT))
 	for idx := range common.WORLD_CHUNK_COUNT {
 		go s.CreateChunk(&result, world, idx)
 	}
-	s.Log.WarnIfErr(result.Wait(), "failed to create all new chunks in database")
+	s.log.WarnIfErr(result.Wait(), "failed to create all new chunks in database")
 }
 
 const DB_QUERY_CREATE_CHUNK string = `
@@ -333,11 +338,11 @@ VALUES ($1, $2, $3);`
 func (s *SweepDB) CreateChunk(result *AttemptGroup, world *ServerWorld, idx int) {
 	data := world.CopyChunk(idx)
 	id := world.Id.Load()
-	s.WriteLock.Lock()
-	defer s.WriteLock.Unlock()
-	_, err := s.Db.ExecContext(result.Timeout, DB_QUERY_CREATE_CHUNK, id, idx, data[:])
+	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
+	_, err := s.db.ExecContext(result.Timeout, DB_QUERY_CREATE_CHUNK, id, idx, data[:])
 	if err != nil {
-		s.Log.WarnIfErr(err, "failed to create world %d chunk %d in database", id, idx)
+		s.log.WarnIfErr(err, "failed to create world %d chunk %d in database", id, idx)
 		result.Failure()
 	} else {
 		result.Success()
@@ -352,11 +357,11 @@ WHERE world_id=$1 AND idx=$2;`
 func (s *SweepDB) UpdateChunk(result *AttemptGroup, world *ServerWorld, idx int) {
 	data := world.CopyChunk(idx)
 	id := world.Id.Load()
-	s.WriteLock.Lock()
-	defer s.WriteLock.Unlock()
-	_, err := s.Db.ExecContext(result.Timeout, DB_QUERY_UPDATE_CHUNK, id, idx, data[:])
+	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
+	_, err := s.db.ExecContext(result.Timeout, DB_QUERY_UPDATE_CHUNK, id, idx, data[:])
 	if err != nil {
-		s.Log.WarnIfErr(err, "failed to create world %d chunk %d in database", id, idx)
+		s.log.WarnIfErr(err, "failed to create world %d chunk %d in database", id, idx)
 		result.Failure()
 	} else {
 		result.Success()
@@ -368,7 +373,7 @@ func (s *SweepDB) UpdateAllChunks(world *ServerWorld) {
 	for idx := range common.WORLD_CHUNK_COUNT {
 		go s.UpdateChunk(&result, world, idx)
 	}
-	s.Log.WarnIfErr(result.Wait(), "failed to update all chunks in database")
+	s.log.WarnIfErr(result.Wait(), "failed to update all chunks in database")
 }
 
 const DB_QUERY_LOAD_CHUNKS string = `
@@ -379,15 +384,15 @@ WHERE world_id=$1;`
 func (s *SweepDB) LoadAllChunks(world *ServerWorld) {
 	timeout := attempt_group.NewTimeout(time.Second * 10)
 	id := world.Id.Load()
-	rows, err := s.Db.QueryContext(timeout, DB_QUERY_LOAD_CHUNKS, id)
-	s.Log.WarnIfErr(err, "failed to load any chunks for world %d from database", id)
+	rows, err := s.db.QueryContext(timeout, DB_QUERY_LOAD_CHUNKS, id)
+	s.log.WarnIfErr(err, "failed to load any chunks for world %d from database", id)
 	defer rows.Close()
 	var idx int
 	var data []byte
 	var cnt int
 	for rows.Next() {
 		err = rows.Scan(&idx, &data)
-		s.Log.WarnIfErr(err, "failed to scan chunk data")
+		s.log.WarnIfErr(err, "failed to scan chunk data")
 		cPos := coord.CoordFromIndex(idx, common.CY_SHIFT, common.CX_MASK)
 		tTopLeft := cPos.ShiftUpScalar(common.TILE_TO_LOCK_SHIFT)
 		bIdx := 0
@@ -402,7 +407,7 @@ func (s *SweepDB) LoadAllChunks(world *ServerWorld) {
 		cnt += 1
 	}
 	if cnt != common.WORLD_CHUNK_COUNT {
-		s.Log.Warn("only loaded %d/%d chunks from database for world %d", cnt, common.WORLD_CHUNK_COUNT, id)
+		s.log.Warn("only loaded %d/%d chunks from database for world %d", cnt, common.WORLD_CHUNK_COUNT, id)
 	}
 }
 
@@ -414,7 +419,7 @@ WHERE expired=0 AND cleared=0 AND difficulty=$1;`
 func (s *SweepDB) GetActiveWorld(world *ServerWorld, difficulty byte) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	row := s.Db.QueryRowContext(ctx, DB_QUERY_GET_ACTIVE_WORLD, difficulty)
+	row := s.db.QueryRowContext(ctx, DB_QUERY_GET_ACTIVE_WORLD, difficulty)
 	var id, part, score uint32
 	err := row.Scan(
 		&id,

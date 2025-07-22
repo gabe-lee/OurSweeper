@@ -17,11 +17,11 @@ type SweepRequest struct {
 	Pos ByteCoord
 }
 
-func (s *SweepRequest) WireRead(w *wire.IncomingWire) {
+func (s *SweepRequest) WireRead(w *wire.Incoming) {
 	s.Pos.WireRead(w)
 }
 
-func (s *SweepRequest) WireWrite(w *wire.OutgoingWire) {
+func (s *SweepRequest) WireWrite(w *wire.Outgoing) {
 	s.Pos.WireWrite(w)
 }
 

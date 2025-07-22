@@ -7,8 +7,8 @@ import (
 )
 
 type (
-	IncomingWire = wire.IncomingWire
-	OutgoingWire = wire.OutgoingWire
+	IncomingWire = wire.Incoming
+	OutgoingWire = wire.Outgoing
 )
 
 type number interface {
@@ -212,13 +212,13 @@ func (c Coord[T]) String() string {
 }
 
 func (c *Coord[T]) WireRead(w *IncomingWire) {
-	w.TryRead_Auto(&c.X)
-	w.TryRead_Auto(&c.Y)
+	w.Auto(&c.X)
+	w.Auto(&c.Y)
 }
 
-func (c *Coord[T]) WireWrite(w *wire.OutgoingWire) {
-	w.TryWrite_Auto(c.X)
-	w.TryWrite_Auto(c.Y)
+func (c *Coord[T]) WireWrite(w *wire.Outgoing) {
+	w.Auto(c.X)
+	w.Auto(c.Y)
 }
 
 func (c Coord[T]) ToCoordByte() Coord[byte] {

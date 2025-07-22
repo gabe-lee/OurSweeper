@@ -22,14 +22,14 @@ type ServerErrorResult struct {
 	Extra uint32
 }
 
-func (s *ServerErrorResult) WireRead(w *wire.IncomingWire) {
-	w.TryRead_U32(&s.Code)
-	w.TryRead_U32(&s.Extra)
+func (s *ServerErrorResult) WireRead(w *wire.Incoming) {
+	w.U32(&s.Code)
+	w.U32(&s.Extra)
 }
 
-func (s *ServerErrorResult) WireWrite(w *wire.OutgoingWire) {
-	w.TryWrite_U32(s.Code)
-	w.TryWrite_U32(s.Extra)
+func (s *ServerErrorResult) WireWrite(w *wire.Outgoing) {
+	w.U32(s.Code)
+	w.U32(s.Extra)
 }
 
 var _ wire.WireReader = (*ServerErrorResult)(nil)
