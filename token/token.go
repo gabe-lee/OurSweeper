@@ -1,12 +1,11 @@
 package token
 
 import (
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/binary"
-	"fmt"
+	"hash"
 
+	"github.com/gabe-lee/OurSweeper/data_buffer"
 	"github.com/gabe-lee/OurSweeper/wire"
 )
 
@@ -14,63 +13,119 @@ const HMAC_LEN = sha256.Size
 const MIN_TOKEN_LEN = HMAC_LEN + 1
 
 var HASHER = sha256.New
-var BYTE_ORDER = binary.LittleEndian
+var BYTE_ORDER = wire.LE
 
 type (
-	WireWriter   = wire.WireWriter
-	WireReader   = wire.WireReader
-	IncomingWire = wire.Incoming
-	OutgoingWire = wire.Outgoing
+	WireWriter      = wire.WireWriter
+	WireSizeWriter  = wire.WireSizeWriter
+	WireReader      = wire.WireReader
+	WireSizeReader  = wire.WireSizeReader
+	IncomingWire    = wire.Incoming
+	OutgoingWire    = wire.Outgoing
+	WriteBuffer     = data_buffer.WriteBuffer
+	WriteBufferPool = data_buffer.WriteBufferPool
+	ReadBuffer      = data_buffer.ReadBuffer
+	Hash            = hash.Hash
 )
 
-func Create(secret []byte, inputPayload WireWriter) (token []byte, err error) {
-	buf := bytes.Buffer{}
-	hasher := hmac.New(HASHER, secret)
-	write := wire.NewOutgoing(&buf, wire.LE)
-	write.OnWrite = func(writtenBytes []byte) {
-		_, e := hasher.Write(writtenBytes)
-		write.ReplaceErr(e)
-	}
+// type tokenWriter struct {
+// 	buf  WriteBuffer
+// 	err  error
+// 	hash Hash
+// }
+
+// func newWriter(secret []byte, payloadSize int) tokenWriter {
+// 	t := tokenWriter{
+// 		buf:  data_buffer.NewWriteBuffer(payloadSize + HMAC_LEN),
+// 		hash: hmac.New(HASHER, secret),
+// 	}
+// 	return t
+// }
+
+// func (t *tokenWriter) Write(p []byte) (n int, err error) {
+// 	n, _ = t.buf.Write(p)
+// 	_, err = t.hash.Write(p)
+// 	if t.err == nil {
+// 		t.err = err
+// 	}
+// 	return
+// }
+
+// func (t *tokenWriter) WriteNoHash(p []byte) {
+// 	t.buf.Write(p)
+// }
+
+// type tokenValidReader struct {
+// 	buf  ReadBuffer
+// 	err  error
+// 	hash Hash
+// }
+
+// func newValidReader(secret []byte, data []byte) tokenValidReader {
+// 	t := tokenValidReader{
+// 		buf:  data_buffer.NewReadBuffer(data),
+// 		hash: hmac.New(HASHER, secret),
+// 	}
+// 	return t
+// }
+
+// func (t *tokenValidReader) Read(p []byte) (n int, err error) {
+// 	n, err = t.buf.Read(p)
+// 	if t.err == nil {
+// 		t.err = err
+// 	}
+// 	_, err = t.hash.Write(p)
+// 	if t.err == nil {
+// 		t.err = err
+// 	}
+// 	return
+// }
+
+// var _ io.Reader = (*tokenValidReader)(nil)
+
+// type tokenReader struct {
+// 	buf ReadBuffer
+// 	err error
+// }
+
+// func newReader(data []byte) tokenReader {
+// 	t := tokenReader{
+// 		buf: data_buffer.NewReadBuffer(data),
+// 	}
+// 	return t
+// }
+
+// func (t *tokenReader) Read(p []byte) (n int, err error) {
+// 	n, err = t.buf.Read(p)
+// 	if t.err == nil {
+// 		t.err = err
+// 	}
+// 	return
+// }
+
+// var _ io.Reader = (*tokenReader)(nil)
+
+func Create(secret []byte, inputPayload WireSizeWriter, outputBuffer *WriteBuffer) error {
+	size := inputPayload.WireSize()
+	fullSize := size + HMAC_LEN
+	write := wire.NewOutgoingAdv(outputBuffer, BYTE_ORDER, hmac.New(HASHER, secret), nil, fullSize)
 	write.Struct(inputPayload)
-	if write.HasErr() {
-		return nil, write.Err()
-	}
-	if buf.Len() <= 0 {
-		return nil, fmt.Errorf("token payload must be at least 1 byte of data")
-	}
-	_, err = hasher.Write(buf.Bytes())
-	if err != nil {
-		return nil, err
-	}
-	HMAC := make([]byte, 0, HMAC_LEN)
-	HMAC = hasher.Sum(HMAC)
-	write.OnWrite = nil
-	write.U8_Slice(HMAC)
-	return buf.Bytes(), write.Err()
+	write.OwnHash()
+	return write.Err
 }
 
-func OpenAndValidate(secret []byte, token []byte, outputPayload WireReader) (valid bool, err error) {
-	tlen := len(token)
-	if tlen < MIN_TOKEN_LEN {
-		return false, fmt.Errorf("invalid token: must be at least %d bytes long (%d bytes for HMAC and at least 1 byte of data), got %d bytes", MIN_TOKEN_LEN, HMAC_LEN, tlen)
-	}
-	hmacStart := tlen - HMAC_LEN
-	sentHMAC := token[hmacStart:]
-	hasher := hmac.New(HASHER, secret)
-	read := wire.NewIncomingSlice(token[0:hmacStart], wire.LE)
-	read.OnRead = func(readBytes []byte) {
-		_, e := hasher.Write(readBytes)
-		read.ReplaceErr(e)
-	}
+func OpenAndValidate(secret []byte, inputBuffer *ReadBuffer, outputPayload WireReader) (valid bool, err error) {
+	read := wire.NewIncomingAdv(inputBuffer, BYTE_ORDER, hmac.New(HASHER, secret), nil, inputBuffer.Len())
 	read.Struct(outputPayload)
+	sentHMAC := inputBuffer.BytesRef()[:HMAC_LEN]
 	expectedHMAC := make([]byte, 0, HMAC_LEN)
-	expectedHMAC = hasher.Sum(expectedHMAC)
+	expectedHMAC = read.Hasher.Sum(expectedHMAC)
 	valid = hmac.Equal(expectedHMAC, sentHMAC)
-	return valid, read.Err()
+	return valid, read.Err
 }
 
-func Open(token []byte, outputPayload WireReader) error {
-	read := wire.NewIncomingSlice(token, wire.LE)
+func Open(inputBuffer *ReadBuffer, outputPayload WireReader) error {
+	read := wire.NewIncomingAdv(inputBuffer, BYTE_ORDER, nil, nil, inputBuffer.Len())
 	read.Struct(outputPayload)
-	return read.Err()
+	return read.Err
 }

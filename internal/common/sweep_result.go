@@ -67,7 +67,8 @@ func (s *SweepResult) DoActionOnAllTiles(action func(pos Coord, icon byte)) {
 
 func (s *SweepResult) WireWrite(w *wire.Outgoing) {
 	w.U16(s.Score)
-	s.Center.WireWrite(w)
+	w.U8(s.Center.X)
+	w.U8(s.Center.Y)
 	w.U64(s.RelativeBits)
 	w.U8(s.Len)
 	iconLen := (s.Len + 1) >> 1
@@ -75,7 +76,8 @@ func (s *SweepResult) WireWrite(w *wire.Outgoing) {
 }
 func (s *SweepResult) WireRead(w *wire.Incoming) {
 	w.U16(&s.Score)
-	s.Center.WireRead(w)
+	w.U8(&s.Center.X)
+	w.U8(&s.Center.Y)
 	w.U64(&s.RelativeBits)
 	w.U8(&s.Len)
 	iconLen := (s.Len + 1) >> 1

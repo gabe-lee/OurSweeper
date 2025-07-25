@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -29,6 +30,12 @@ func (e *FirstError) Add(err error) {
 	if e.Err == nil {
 		e.Err = err
 	}
+}
+
+func (e *FirstError) Read(r io.Reader, dst []byte) (n int) {
+	n, ee := r.Read(dst)
+	e.Add(ee)
+	return n
 }
 
 type ErrorCollector struct {
@@ -120,8 +127,8 @@ func (eb *ErrorBuffer) Cap() int {
 	return eb.strBuf.Cap()
 }
 
-func (eb *ErrorBuffer) EnsureSpace(space int) {
-	eb.strBuf.EnsureSpace(space)
+func (eb *ErrorBuffer) EnsureSpace(pool *data_buffer.WriteBufferPool, space int) {
+	eb.strBuf.EnsureSpace(pool, space)
 }
 
 var QuickItoA = [100]string{
@@ -194,4 +201,22 @@ func QuickHexStringToInt(hexStr string) uint64 {
 		i += 1
 	}
 	return val
+}
+
+// Returns the index in the ordered data set where element `target`
+// should exist, and bool `found` if the actual element at that index matches the target
+func BinarySearch[T cmp.Ordered](data []T, target T) (idx int, found bool) {
+	low := 0
+	high := len(data) - 1
+	for low <= high {
+		idx := low + ((high - low) / 2)
+		if data[idx] == target {
+			return idx, true
+		} else if data[idx] < target {
+			low = idx + 1
+		} else {
+			high = idx - 1
+		}
+	}
+	return low, data[low] == target
 }

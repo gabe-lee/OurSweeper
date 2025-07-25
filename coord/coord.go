@@ -211,16 +211,6 @@ func (c Coord[T]) String() string {
 	return fmt.Sprintf("(%d, %d)", c.X, c.Y)
 }
 
-func (c *Coord[T]) WireRead(w *IncomingWire) {
-	w.Auto(&c.X)
-	w.Auto(&c.Y)
-}
-
-func (c *Coord[T]) WireWrite(w *wire.Outgoing) {
-	w.Auto(c.X)
-	w.Auto(c.Y)
-}
-
 func (c Coord[T]) ToCoordByte() Coord[byte] {
 	return Coord[byte]{
 		X: byte(c.X),
@@ -233,11 +223,6 @@ func (c Coord[T]) ToCoordInt() Coord[int] {
 		Y: int(c.Y),
 	}
 }
-
-var _ wire.WireWriter = (*Coord[byte])(nil)
-var _ wire.WireReader = (*Coord[byte])(nil)
-var _ wire.WireWriter = (*Coord[int])(nil)
-var _ wire.WireReader = (*Coord[int])(nil)
 
 // func (c Coord) GetNearbyCoords(minX, maxX, minY, maxY int) NearbyCoords {
 // 	near := NearbyCoords{}

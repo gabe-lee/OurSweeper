@@ -14,6 +14,7 @@ import (
 	"github.com/gabe-lee/OurSweeper/coord"
 	"github.com/gabe-lee/OurSweeper/env_loader"
 	"github.com/gabe-lee/OurSweeper/internal/common"
+	"github.com/gabe-lee/OurSweeper/internal/server_utility"
 	"github.com/gabe-lee/OurSweeper/logger"
 )
 
@@ -26,6 +27,7 @@ type (
 	SubLoggerWriter = logger.SubLoggerWriter
 	ServerWorld     = common.ServerWorld
 	Tile            = common.Tile
+	ServerUtility   = server_utility.ServerUtility
 )
 
 const (
@@ -53,6 +55,10 @@ DROP TABLE IF EXISTS participation;
 DROP TABLE IF EXISTS flags;
 DROP TABLE IF EXISTS worlds;
 `
+)
+
+const (
+	shutdownFlag uint32 = 4 //MUST match server.SHUT_DATABASE, but cannot import it
 )
 
 const (
@@ -178,18 +184,19 @@ type SweepDB struct {
 	log       SubLogger
 	logWriter SubLoggerWriter
 	env       SweepDbEnv
+	utils     *ServerUtility
 }
 
-func NewSweepDB(masterLogger *Logger) SweepDB {
-	log := masterLogger.NewSubLogger("Database")
-	logWriter := log.NewSubLoggerWriter(logger.ERROR)
-	env := SweepDbEnv{}
-	env_loader.LoadAndFill(&env, &logWriter)
-	return SweepDB{
-		log:       masterLogger.NewSubLogger("Database"),
-		logWriter: logWriter,
-		env:       env,
-	}
+func (s *SweepDB) Init(utils *ServerUtility, masterLogger *Logger) {
+	s.log = masterLogger.NewSubLogger("Database")
+	s.logWriter = s.log.NewSubLoggerWriter(logger.ERROR)
+	s.utils = utils
+	env_loader.LoadAndFill(&s.env, &s.logWriter)
+}
+
+func (s *SweepDB) Start() {
+	s.CheckFile()
+	s.Open()
 }
 
 func (s *SweepDB) CheckFile() {
@@ -251,7 +258,7 @@ func (s *SweepDB) Open() {
 
 func (s *SweepDB) Close() {
 	err := s.db.Close()
-	s.log.WarnIfErr(err, "failed to close database")
+	s.log.WarnIfErr(err, "Server Shutdown: database failed to close gracefully")
 	s.log.Close()
 	s.db = nil
 	s.Ver = 0

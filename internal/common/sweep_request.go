@@ -18,11 +18,13 @@ type SweepRequest struct {
 }
 
 func (s *SweepRequest) WireRead(w *wire.Incoming) {
-	s.Pos.WireRead(w)
+	w.U8(&s.Pos.X)
+	w.U8(&s.Pos.Y)
 }
 
 func (s *SweepRequest) WireWrite(w *wire.Outgoing) {
-	s.Pos.WireWrite(w)
+	w.U8(s.Pos.X)
+	w.U8(s.Pos.Y)
 }
 
 func NewSweepRequest(pos Coord) SweepRequest {

@@ -30,7 +30,6 @@ type (
 	ErrorBuffer     = utils.ErrorBuffer
 	MiniLock        = lock.MiniLock
 	ReadWriteSeeker = io.ReadWriteSeeker
-	ReadWriteWire   = wire.ReadWriteWire
 )
 
 const (
@@ -167,8 +166,8 @@ func NewLogger(outputDir string, masterDir string, consoleWriter Writer, bufferP
 	}
 	var arr [8]byte
 	_, err = l.metaFile.ReadAt(arr[:], offLogId)
-	l.errs.IfErrAddErrWithStr(err, "unable to read log id counter from `%s` file", metaFile)
-	bin.ReadU64(arr, &l.log_id)
+	l.errs.IfErrAddErrWithStr(err, "unable to read log id counter in `%s` file", metaFile)
+	bin.Read64(&arr, &l.log_id)
 	now := time.Now()
 	date := buildDate(now)
 	y1, y2, m, d := unbuildDate(date)
@@ -200,6 +199,14 @@ func (l *Logger) NewSubLogger(name string) SubLogger {
 	sl.file, err = os.OpenFile(sl.todayFileName.StringRef(), logFileFlags, logFilePerms)
 	l.errs.IfErrAddErrWithStr(err, "could not open or create log file  `%s`", sl.todayFileName.StringRef())
 	return sl
+}
+
+func (l *Logger) NewLoggerWriter(mode int) LoggerWriter {
+	lw := LoggerWriter{
+		l: l,
+	}
+	lw.SetMode(mode)
+	return lw
 }
 
 func (l *Logger) Close() {
@@ -422,7 +429,7 @@ func (l *Logger) log(sl *SubLogger, mode int, err error, format string, args ...
 	buf.WriteByte(space)
 	buf.WriteByte(idPrefix)
 	id := atomic.AddUint64(&l.log_id, 1)
-	idBytes := utils.QuickIntToHexString(id)
+	idBytes, _ := utils.QuickIntToHexString(id)
 	buf.WriteBytes(idBytes[:]...)
 	buf.WriteByte(close_brack)
 	buf.WriteByte(space)
@@ -465,15 +472,15 @@ func (l *Logger) log(sl *SubLogger, mode int, err error, format string, args ...
 	}()
 	go func(newId uint64) {
 		l.metadataLock.Lock()
+		var oldId uint64
 		var arr [8]byte
 		_, err = l.metaFile.ReadAt(arr[:], offLogId)
-		var oldId uint64
-		bin.ReadU64(arr, &oldId)
-		l.WarnIfErr(err, "failed to read metadata file value `id` at offset %d", offLogId)
+		l.WarnIfErr(err, "failed to read metadata file value at offset %d (logId)", offLogId)
+		bin.Read64(&arr, &oldId)
 		if newId > oldId {
-			bin.WriteU64(newId, &arr)
+			bin.Write64(newId, &arr)
 			_, err = l.metaFile.WriteAt(arr[:], offLogId)
-			l.WarnIfErr(err, "failed to write metadata file value `id` at offset %d", offLogId)
+			l.WarnIfErr(err, "failed to write metadata file value at offset %d (logId)", offLogId)
 		}
 		l.metadataLock.Unlock()
 		wg.Done()
@@ -505,10 +512,9 @@ func (sl *SubLogger) NewSubLoggerWriter(mode int) SubLoggerWriter {
 	return slw
 }
 
-func (sl *SubLogger) Fatal(format string, args ...any) {
+func (sl *SubLogger) Fatal(format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.Fatal(): ")
-	sl.logger.log(sl, FATAL, nil, format, args...)
-	os.Exit(1)
+	return sl.logger.log(sl, FATAL, nil, format, args...)
 }
 
 func (sl *SubLogger) Error(format string, args ...any) (logId uint64) {
@@ -550,18 +556,18 @@ func (sl *SubLogger) Log(mode int, format string, args ...any) (logId uint64) {
 	return
 }
 
-func (sl *SubLogger) FatalIfErr(err error, format string, args ...any) {
+func (sl *SubLogger) FatalIfErr(err error, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.FatalIfErr(): ")
 	if err != nil {
-		sl.logger.log(sl, FATAL, err, format, args...)
-		os.Exit(1)
+		logId = sl.logger.log(sl, FATAL, err, format, args...)
 	}
+	return
 }
 
 func (sl *SubLogger) ErrorIfErr(err error, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.ErrorIfErr(): ")
 	if err != nil {
-		sl.logger.log(sl, WARN, err, format, args...)
+		logId = sl.logger.log(sl, WARN, err, format, args...)
 	}
 	return
 }
@@ -569,7 +575,7 @@ func (sl *SubLogger) ErrorIfErr(err error, format string, args ...any) (logId ui
 func (sl *SubLogger) WarnIfErr(err error, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.WarnIfErr(): ")
 	if err != nil {
-		sl.logger.log(sl, WARN, err, format, args...)
+		logId = sl.logger.log(sl, WARN, err, format, args...)
 	}
 	return
 }
@@ -577,7 +583,7 @@ func (sl *SubLogger) WarnIfErr(err error, format string, args ...any) (logId uin
 func (sl *SubLogger) NoteIfErr(err error, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.NoteIfErr(): ")
 	if err != nil {
-		sl.logger.log(sl, NOTE, err, format, args...)
+		logId = sl.logger.log(sl, NOTE, err, format, args...)
 	}
 	return
 }
@@ -585,7 +591,7 @@ func (sl *SubLogger) NoteIfErr(err error, format string, args ...any) (logId uin
 func (sl *SubLogger) InfoIfErr(err error, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.InfoIfErr(): ")
 	if err != nil {
-		sl.logger.log(sl, INFO, err, format, args...)
+		logId = sl.logger.log(sl, INFO, err, format, args...)
 	}
 	return
 }
@@ -593,7 +599,7 @@ func (sl *SubLogger) InfoIfErr(err error, format string, args ...any) (logId uin
 func (sl *SubLogger) NormIfErr(err error, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.NormIfErr(): ")
 	if err != nil {
-		sl.logger.log(sl, LOG, err, format, args...)
+		logId = sl.logger.log(sl, LOG, err, format, args...)
 	}
 	return
 }
@@ -601,23 +607,23 @@ func (sl *SubLogger) NormIfErr(err error, format string, args ...any) (logId uin
 func (sl *SubLogger) LogIfErr(mode int, err error, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.NormIfErr(): ")
 	if err != nil {
-		sl.logger.log(sl, mode, err, format, args...)
+		logId = sl.logger.log(sl, mode, err, format, args...)
 	}
 	return
 }
 
-func (sl *SubLogger) FatalIfTrue(cond bool, format string, args ...any) {
+func (sl *SubLogger) FatalIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.FatalIfTrue(): ")
 	if cond {
-		sl.logger.log(sl, FATAL, nil, format, args...)
-		os.Exit(1)
+		logId = sl.logger.log(sl, FATAL, nil, format, args...)
 	}
+	return
 }
 
 func (sl *SubLogger) ErrorIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.ErrorIfTrue(): ")
 	if cond {
-		sl.logger.log(sl, WARN, nil, format, args...)
+		logId = sl.logger.log(sl, WARN, nil, format, args...)
 	}
 	return
 }
@@ -625,7 +631,7 @@ func (sl *SubLogger) ErrorIfTrue(cond bool, format string, args ...any) (logId u
 func (sl *SubLogger) WarnIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.WarnIfTrue(): ")
 	if cond {
-		sl.logger.log(sl, WARN, nil, format, args...)
+		logId = sl.logger.log(sl, WARN, nil, format, args...)
 	}
 	return
 }
@@ -633,7 +639,7 @@ func (sl *SubLogger) WarnIfTrue(cond bool, format string, args ...any) (logId ui
 func (sl *SubLogger) NoteIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.NoteIfTrue(): ")
 	if cond {
-		sl.logger.log(sl, NOTE, nil, format, args...)
+		logId = sl.logger.log(sl, NOTE, nil, format, args...)
 	}
 	return
 }
@@ -641,7 +647,7 @@ func (sl *SubLogger) NoteIfTrue(cond bool, format string, args ...any) (logId ui
 func (sl *SubLogger) InfoIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.InfoIfTrue(): ")
 	if cond {
-		sl.logger.log(sl, INFO, nil, format, args...)
+		logId = sl.logger.log(sl, INFO, nil, format, args...)
 	}
 	return
 }
@@ -649,7 +655,7 @@ func (sl *SubLogger) InfoIfTrue(cond bool, format string, args ...any) (logId ui
 func (sl *SubLogger) NormIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.NormIfTrue(): ")
 	if cond {
-		sl.logger.log(sl, LOG, nil, format, args...)
+		logId = sl.logger.log(sl, LOG, nil, format, args...)
 	}
 	return
 }
@@ -657,7 +663,7 @@ func (sl *SubLogger) NormIfTrue(cond bool, format string, args ...any) (logId ui
 func (sl *SubLogger) LogIfTrue(mode int, cond bool, format string, args ...any) (logId uint64) {
 	defer sl.logger.errs.Flush("error SubLogger.NormIfTrue(): ")
 	if cond {
-		sl.logger.log(sl, mode, nil, format, args...)
+		logId = sl.logger.log(sl, mode, nil, format, args...)
 	}
 	return
 }

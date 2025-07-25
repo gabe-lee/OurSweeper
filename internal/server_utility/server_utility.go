@@ -2,17 +2,16 @@ package server_utility
 
 import "github.com/gabe-lee/OurSweeper/data_buffer"
 
-type ServerUtilityOptions struct {
-	StringBufferPoolCapacity   int
-	StringBufferPoolInitBufCap int
-}
+type (
+	WriteBufferPool = data_buffer.WriteBufferPool
+)
 
 type ServerUtility struct {
-	WriteBufferPool data_buffer.WriteBufferPool
+	WriteBufferPool *WriteBufferPool
 }
 
-func NewServerUtility(options ServerUtilityOptions) ServerUtility {
+func NewServerUtility() ServerUtility {
 	return ServerUtility{
-		WriteBufferPool: data_buffer.NewStringBufferPool(options.StringBufferPoolCapacity, options.StringBufferPoolInitBufCap),
+		WriteBufferPool: data_buffer.NewWriteBufferPool(),
 	}
 }

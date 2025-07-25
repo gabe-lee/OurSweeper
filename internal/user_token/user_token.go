@@ -41,6 +41,11 @@ type UserStats struct {
 	ScreenName    [16]byte
 }
 
+// WireSize implements wire.WireSizer.
+func (a *UserStats) WireSize() int {
+	return 56 + int(a.ScreenNameLen)
+}
+
 // WireRead implements wire.WireReader.
 func (a *UserStats) WireRead(wire *wire.Incoming) {
 	wire.U16(&a.Version)
@@ -79,6 +84,7 @@ func (a *UserStats) WireWrite(wire *wire.Outgoing) {
 
 var _ wire.WireWriter = (*UserStats)(nil)
 var _ wire.WireReader = (*UserStats)(nil)
+var _ wire.WireSizer = (*UserStats)(nil)
 
 type AnonTokenRaw struct {
 	Token []byte

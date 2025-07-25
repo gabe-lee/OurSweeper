@@ -1,8 +1,6 @@
 package logger
 
 import (
-	"os"
-
 	"github.com/gabe-lee/OurSweeper/xmath"
 )
 
@@ -14,9 +12,6 @@ type SubLoggerWriter struct {
 func (slw *SubLoggerWriter) Write(p []byte) (n int, err error) {
 	defer slw.sl.logger.errs.Flush("error SubLoggerWriter.Write(): ")
 	slw.sl.logger.log(slw.sl, slw.mode, nil, "%s", string(p))
-	if slw.mode == FATAL {
-		os.Exit(1)
-	}
 	return len(p), nil
 }
 
@@ -32,9 +27,6 @@ type LoggerWriter struct {
 func (lw *LoggerWriter) Write(p []byte) (n int, err error) {
 	defer lw.l.errs.Flush("error LoggerWriter.Write(): ")
 	lw.l.log(nil, lw.mode, nil, "%s", string(p))
-	if lw.mode == FATAL {
-		os.Exit(1)
-	}
 	return len(p), nil
 }
 func (lw *LoggerWriter) SetMode(mode int) {
