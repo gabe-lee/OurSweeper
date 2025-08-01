@@ -10,14 +10,17 @@ import (
 	"time"
 
 	"github.com/gabe-lee/OurSweeper/coord"
+	C "github.com/gabe-lee/OurSweeper/internal/consts"
+	"github.com/gabe-lee/OurSweeper/internal/sweep_result"
 	"github.com/gabe-lee/OurSweeper/xmath"
 )
 
 type (
-	Mutex     = sync.Mutex
-	Coord     = coord.Coord[int]
-	ByteCoord = coord.Coord[byte]
-	Bounds4   = coord.Bounds4[int]
+	Mutex       = sync.Mutex
+	Coord       = coord.Coord[int]
+	ByteCoord   = coord.Coord[byte]
+	Bounds4     = coord.Bounds4[int]
+	SweepResult = sweep_result.SweepResult
 )
 
 const (
@@ -25,32 +28,20 @@ const (
 
 )
 
-const (
-	DIFFICULTY_EASY byte = iota
-	DIFFICULTY_MEDIUM
-	DIFFICULTY_HARD
-	DIFFICULTY_COUNT
-)
-
-var DIFFICULTY_TABLE = [DIFFICULTY_COUNT][2]float64{
-	{0.10, 0.15},
-	{0.15, 0.25},
-	{0.20, 0.35},
-}
-
 type ServerWorld struct {
-	Id            atomic.Uint32
-	Tiles         [WORLD_TILE_COUNT]Tile
-	Locks         [WORLD_CHUNK_COUNT]Mutex
-	TotalMines    uint32
-	ExplodedMines atomic.Uint32
-	SweptTiles    atomic.Uint32
-	Ended         atomic.Bool
-	Expires       int64
-	NextSave      int64
-	Difficulty    byte
-	Participants  atomic.Uint32
-	Score         atomic.Uint32
+	Id             atomic.Uint64
+	Tiles          [C.WORLD_TILE_COUNT]Tile
+	Locks          [C.WORLD_CHUNK_COUNT]Mutex
+	TotalMines     int32
+	RemainingMines atomic.Int32
+	RemainingTiles atomic.Int32
+	Ended          atomic.Bool
+	Expires        int64
+	NextSave       int64
+	Difficulty     byte
+	CurrentUsers   atomic.Int32
+	TotalUsers     atomic.Int32
+	Score          atomic.Int32
 }
 
 func mineChance(pos Coord, difficulty byte) float64 {
@@ -58,38 +49,38 @@ func mineChance(pos Coord, difficulty byte) float64 {
 	fy := float64(pos.Y)
 	var dx float64
 	var dy float64
-	if pos.X > WORLD_HALF_WIDTH {
-		dx = fx - WORLD_CENTER_X
+	if pos.X > C.WORLD_HALF_WIDTH {
+		dx = fx - C.WORLD_CENTER_X
 	} else {
-		dx = WORLD_CENTER_X - fx
+		dx = C.WORLD_CENTER_X - fx
 	}
-	if pos.Y > WORLD_HALF_HEIGHT {
-		dy = fy - WORLD_CENTER_Y
+	if pos.Y > C.WORLD_HALF_HEIGHT {
+		dy = fy - C.WORLD_CENTER_Y
 	} else {
-		dy = WORLD_CENTER_Y - fy
+		dy = C.WORLD_CENTER_Y - fy
 	}
 	dist := math.Sqrt((dx * dx) + (dy * dy))
-	percent := (MAX_DIST_FROM_CENTER - dist) / MAX_DIST_FROM_CENTER
-	return xmath.Lerp(DIFFICULTY_TABLE[difficulty][0], DIFFICULTY_TABLE[difficulty][1], percent)
+	percent := (C.MAX_DIST_FROM_CENTER - dist) / C.MAX_DIST_FROM_CENTER
+	return xmath.Lerp(C.DIFFICULTY_TABLE[difficulty][0], C.DIFFICULTY_TABLE[difficulty][1], percent)
 }
 
 func (w *ServerWorld) LockEntireWorld() {
-	for i := range WORLD_CHUNK_COUNT {
+	for i := range C.WORLD_CHUNK_COUNT {
 		w.Locks[i].Lock()
 	}
 }
 func (w *ServerWorld) UnlockEntireWorld() {
-	for i := range WORLD_CHUNK_COUNT {
+	for i := range C.WORLD_CHUNK_COUNT {
 		w.Locks[i].Unlock()
 	}
 }
 
 func (w *ServerWorld) AquireQuadLock(bounds Bounds4) QuadLock {
-	lockBounds := bounds.ShiftDownScalar(TILE_TO_LOCK_SHIFT)
-	topLeftIdx := lockBounds.TopLeft.ToIndex(LY_SHIFT)
-	topRightIdx := lockBounds.TopRight.ToIndex(LY_SHIFT)
-	botLeftIdx := lockBounds.BotLeft.ToIndex(LY_SHIFT)
-	botRightIdx := lockBounds.BotRight.ToIndex(LY_SHIFT)
+	lockBounds := bounds.ShiftDownScalar(C.TILE_TO_LOCK_SHIFT)
+	topLeftIdx := lockBounds.TopLeft.ToIndex(C.LY_SHIFT)
+	topRightIdx := lockBounds.TopRight.ToIndex(C.LY_SHIFT)
+	botLeftIdx := lockBounds.BotLeft.ToIndex(C.LY_SHIFT)
+	botRightIdx := lockBounds.BotRight.ToIndex(C.LY_SHIFT)
 	locks := QuadLock{}
 	w.Locks[topLeftIdx].Lock()
 	locks.LockIndexes[0] = topLeftIdx
@@ -118,40 +109,6 @@ func (w *ServerWorld) ReleaseQuadLock(locks QuadLock) {
 	}
 }
 
-// func (w *World) TryLockTile(set *WORLD_LOCK_COUNTet.WORLD_LOCK_COUNTet, x, y int) bool {
-// 	lockX, lockY := tileCoordToLockCoord(x, y)
-// 	lockIdx := GetLockIndex(lockX, lockY)
-// 	if set.AlreadyLocked(lockIdx) {
-// 		return true
-// 	}
-// 	didLock := w.Locks[lockIdx].TryLock()
-// 	if didLock {
-// 		set.AddLock(lockIdx, lockX, lockY)
-// 	}
-// 	return didLock
-// }
-
-// func (w *World) LockTile(set *WORLD_LOCK_COUNTet.WORLD_LOCK_COUNTet, lockIdx, lx, ly int) {
-// 	if set.AlreadyLocked(lockIdx) {
-// 		return
-// 	}
-// 	w.Locks[lockIdx].Lock()
-// 	set.AddLock(lockIdx, lx, ly)
-// }
-
-// func (w *World) UnlockTiles(set *WORLD_LOCK_COUNTet.WORLD_LOCK_COUNTet) {
-// 	for y := set.YMin; y <= set.YMax; y++ {
-// 		for x := set.XMin; x <= set.XMax; x++ {
-// 			idx := (uint64(y) * 8) + uint64(x)
-// 			bit := uint64(1) << idx
-// 			if set.WORLD_LOCK_COUNT&bit > 0 {
-// 				w.Locks[idx].Unlock()
-// 			}
-// 		}
-// 	}
-// 	*set = WORLD_LOCK_COUNTet.WORLD_LOCK_COUNTet{}
-// }
-
 func (w *ServerWorld) initMine(r *rand.Rand, difficulty byte, idx int, pos Coord) bool {
 	thresh := mineChance(pos, difficulty)
 	randVal := r.Float64()
@@ -162,51 +119,30 @@ func (w *ServerWorld) initMine(r *rand.Rand, difficulty byte, idx int, pos Coord
 	return false
 }
 
-// func (w *World) initNearby(idx, x, y int) {
-// 	var total uint8 = 0
-// 	utils.DoFuncOnNearbyCoords()
-// 	yMin := max(y-1, 0)
-// 	yMax := min(y+1, int(WORLD_TILE_WIDTH-1))
-// 	xMin := max(y-1, 0)
-// 	xMax := min(y+1, int(WORLD_TILE_HEIGHT-1))
-// 	for yy := yMin; yy <= yMax; yy++ {
-// 		for xx := xMin; xx <= xMax; xx++ {
-// 			if xx != x || yy != y {
-// 				nearIdx := GetIndex(xx, yy)
-// 				if w.Tiles[nearIdx].IsMine() {
-// 					total++
-// 				}
-// 			}
-// 		}
-// 	}
-// 	w.Tiles[idx].SetNearby(total)
-// }
-
-func (w *ServerWorld) InitNew(id uint32, difficulty byte, expires int64, seed_a, seed_b uint64) {
+func (w *ServerWorld) InitNew(id uint64, difficulty byte, expires int64, seed_a, seed_b uint64) {
 	pcg := rand.NewPCG(seed_a, seed_b)
 	r := rand.New(pcg)
 	w.Id.Store(id)
-	w.SweptTiles.Store(uint32(INITIAL_SWEPT_TILES))
-	w.ExplodedMines.Store(0)
+	w.RemainingTiles.Store(int32(C.INITIAL_OPAQUE_TILES))
 	w.Ended.Store(false)
 	w.Expires = expires
 	w.Difficulty = difficulty
-	for idx := range WORLD_TILE_COUNT {
+	for idx := range C.WORLD_TILE_COUNT {
 		w.Tiles[idx] = Tile(0)
 	}
-	for idx := range WORLD_CHUNK_COUNT {
+	for idx := range C.WORLD_CHUNK_COUNT {
 		w.Locks[idx] = sync.Mutex{}
 	}
-	for idx := range WORLD_TILE_COUNT {
-		pos := coord.CoordFromIndex(idx, TY_SHIFT, TX_MASK)
-		if pos.IsInRangeExcludeEdges(0, WORLD_MAX_X, 0, WORLD_MAX_Y) {
+	for idx := range C.WORLD_TILE_COUNT {
+		pos := coord.CoordFromIndex(idx, C.TY_SHIFT, C.TX_MASK)
+		if pos.IsInRangeExcludeEdges(0, C.WORLD_MAX_X, 0, C.WORLD_MAX_Y) {
 			mine := w.initMine(r, difficulty, idx, pos)
 			if mine {
 				w.TotalMines += 1
 				queue := NewCascadeQueue(pos)
 				next, hasMore := queue.NextToCheck()
 				for hasMore {
-					nearIdx := next.Pos.ToIndex(TY_SHIFT)
+					nearIdx := next.Pos.ToIndex(C.TY_SHIFT)
 					w.Tiles[nearIdx].IncrNearbyMineCount()
 					next, hasMore = queue.NextToCheck()
 				}
@@ -215,22 +151,23 @@ func (w *ServerWorld) InitNew(id uint32, difficulty byte, expires int64, seed_a,
 			w.Tiles[idx].SetVizSweptEmpty()
 		}
 	}
+	w.RemainingMines.Store(w.TotalMines)
 }
 
 func (w *ServerWorld) SweepTile(pos Coord) SweepResult {
 	result := SweepResult{}
-	tileIdx := pos.ToIndex(TY_SHIFT)
+	tileIdx := pos.ToIndex(C.TY_SHIFT)
 	t := w.Tiles[tileIdx]
 	if t.IsSwept() {
 		return result
 	}
-	bounds := pos.GetBounds4(Coord{X: MAX_CASCDE_DIST, Y: MAX_CASCDE_DIST}, 0, WORLD_MAX_X, 0, WORLD_MAX_Y)
+	bounds := pos.GetBounds4(Coord{X: C.MAX_CASCDE_DIST, Y: C.MAX_CASCDE_DIST}, 0, C.WORLD_MAX_X, 0, C.WORLD_MAX_Y)
 	locks := w.AquireQuadLock(bounds)
 	defer w.ReleaseQuadLock(locks)
 	isMine := t.IsMine()
 	if isMine {
 		t.SetVizSweptBomb()
-		w.ExplodedMines.Add(1)
+		w.RemainingMines.Add(-1)
 	} else {
 		t.SetVizSweptEmpty()
 	}
@@ -240,30 +177,25 @@ func (w *ServerWorld) SweepTile(pos Coord) SweepResult {
 	} else if t.GetNearby() == 0 {
 		w.cascade(&result, pos)
 	}
-	if !isMine {
-		w.SweptTiles.Add(uint32(result.Len))
-	}
+	w.RemainingTiles.Add(-int32(result.Len))
 	w.Tiles[tileIdx] = t
 	w.checkEndState()
-
 	return result
 }
 
 func (w *ServerWorld) checkEndState() {
-	if exploded := w.ExplodedMines.Load(); exploded == w.TotalMines {
-		w.Ended.Store(true)
-	} else if swept := w.SweptTiles.Load(); swept == uint32(WORLD_TILE_COUNT) {
-		w.Ended.Store(true)
-	} else if time.Now().Unix() > w.Expires {
+	remainingMines := w.RemainingMines.Load()
+	remainingTiles := w.RemainingTiles.Load()
+	if remainingTiles <= remainingMines {
 		w.Ended.Store(true)
 	}
 }
 
 func (w *ServerWorld) getScore(pos Coord) uint16 {
-	var lowestNearBombChance float64 = RISC_FULL_BLIND
-	var lowestNearBombChanceBombs uint8 = IDX_FULL_BLIND_BASE
-	DoActionOn8NearbyCoordsInRange(pos, 0, WORLD_MAX_X, 0, WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
-		nearIdx := nearPos.ToIndex(TY_SHIFT)
+	var lowestNearBombChance float64 = C.RISC_FULL_BLIND
+	var lowestNearBombChanceBombs uint8 = C.IDX_FULL_BLIND_BASE
+	DoActionOn8NearbyCoordsInRange(pos, 0, C.WORLD_MAX_X, 0, C.WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
+		nearIdx := nearPos.ToIndex(C.TY_SHIFT)
 		if w.Tiles[nearIdx].IsSwept() {
 			thisBombChance, thisBombs := w.getBombProbabilityAndNearby(nearPos)
 			if thisBombChance < lowestNearBombChance {
@@ -272,9 +204,9 @@ func (w *ServerWorld) getScore(pos Coord) uint16 {
 			}
 		}
 	})
-	scoreFloat := BOMB_NEAR_BASE_SCORE[lowestNearBombChanceBombs]
+	scoreFloat := C.BOMB_NEAR_BASE_SCORE[lowestNearBombChanceBombs]
 	if lowestNearBombChance < 1.0 {
-		exp := RISC_EXPONENT_ADD + (RISC_EXPONENT_MULT * lowestNearBombChance)
+		exp := C.RISC_EXPONENT_ADD + (C.RISC_EXPONENT_MULT * lowestNearBombChance)
 		scoreFloat = math.Ceil(math.Pow(scoreFloat, exp))
 	}
 	return uint16(scoreFloat)
@@ -282,9 +214,9 @@ func (w *ServerWorld) getScore(pos Coord) uint16 {
 
 func (w *ServerWorld) getBombProbabilityAndNearby(pos Coord) (safe float64, near uint8) {
 	var opaques float64
-	bombs := w.Tiles[pos.ToIndex(TY_SHIFT)].GetNearby()
-	DoActionOn8NearbyCoordsInRange(pos, 0, WORLD_MAX_X, 0, WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
-		nearIdx := nearPos.ToIndex(TY_SHIFT)
+	bombs := w.Tiles[pos.ToIndex(C.TY_SHIFT)].GetNearby()
+	DoActionOn8NearbyCoordsInRange(pos, 0, C.WORLD_MAX_X, 0, C.WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
+		nearIdx := nearPos.ToIndex(C.TY_SHIFT)
 		if !w.Tiles[nearIdx].IsSwept() {
 			opaques += 1.0
 		}
@@ -293,8 +225,8 @@ func (w *ServerWorld) getBombProbabilityAndNearby(pos Coord) (safe float64, near
 }
 
 func (w *ServerWorld) reduceNearbyBombCounts(result *SweepResult, pos Coord) {
-	DoActionOn8NearbyCoordsInRange(pos, 0, WORLD_MAX_X, 0, WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
-		nextIdx := nearPos.ToIndex(TY_SHIFT)
+	DoActionOn8NearbyCoordsInRange(pos, 0, C.WORLD_MAX_X, 0, C.WORLD_MAX_Y, func(nearPos Coord, nearBit uint64) {
+		nextIdx := nearPos.ToIndex(C.TY_SHIFT)
 		mines := w.Tiles[nextIdx].GetNearby()
 		w.Tiles[nextIdx].SetNearby(mines - 1)
 		if w.Tiles[nextIdx].IsSwept() {
@@ -304,10 +236,10 @@ func (w *ServerWorld) reduceNearbyBombCounts(result *SweepResult, pos Coord) {
 }
 
 func (w *ServerWorld) checkCascade(result *SweepResult, queue *CascadeQueue, coord CascadeCoord) {
-	if !coord.Pos.IsInRange(0, WORLD_MAX_X, 0, WORLD_MAX_Y) {
+	if !coord.Pos.IsInRange(0, C.WORLD_MAX_X, 0, C.WORLD_MAX_Y) {
 		return
 	}
-	thisIdx := coord.Pos.ToIndex(TY_SHIFT)
+	thisIdx := coord.Pos.ToIndex(C.TY_SHIFT)
 	if w.Tiles[thisIdx].IsSwept() {
 		return
 	}
@@ -328,18 +260,18 @@ func (w *ServerWorld) cascade(result *SweepResult, pos Coord) {
 	}
 }
 
-func (w *ServerWorld) CopyChunk(idx int) [TILES_PER_CHUNK]byte {
+func (w *ServerWorld) CopyChunk(idx int) [C.TILES_PER_CHUNK]byte {
 	w.Locks[idx].Lock()
 	defer w.Locks[idx].Unlock()
-	var data [TILES_PER_CHUNK]byte
-	chunkPos := coord.CoordFromIndex(idx, LY_SHIFT, LX_MASK)
-	chunkTilePos := chunkPos.ShiftUpScalar(TILE_TO_LOCK_SHIFT)
-	for y := range WORLD_TILES_PER_CHUNK_AXIS {
-		for x := range WORLD_TILES_PER_CHUNK_AXIS {
+	var data [C.TILES_PER_CHUNK]byte
+	chunkPos := coord.CoordFromIndex(idx, C.LY_SHIFT, C.LX_MASK)
+	chunkTilePos := chunkPos.ShiftUpScalar(C.TILE_TO_LOCK_SHIFT)
+	for y := range C.WORLD_TILES_PER_CHUNK_AXIS {
+		for x := range C.WORLD_TILES_PER_CHUNK_AXIS {
 			wPos := chunkTilePos.AddXY(x, y)
-			wIdx := wPos.ToIndex(TY_SHIFT)
+			wIdx := wPos.ToIndex(C.TY_SHIFT)
 			cPos := coord.NewCoord(x, y)
-			cIdx := cPos.ToIndex(CY_SHIFT)
+			cIdx := cPos.ToIndex(C.CY_SHIFT)
 			data[cIdx] = byte(w.Tiles[wIdx])
 		}
 	}
@@ -347,7 +279,7 @@ func (w *ServerWorld) CopyChunk(idx int) [TILES_PER_CHUNK]byte {
 }
 
 func (w *ServerWorld) PrintStatus(wr io.Writer) {
-	exploed := w.ExplodedMines.Load()
-	swept := w.SweptTiles.Load()
-	fmt.Fprintf(wr, "World ID: %d\n-Total Mines: %d\n-Exploded Mines: %d\n-Total Tiles: %d\n-SweptTiles: %d\n-Mine Completion: %.2f%%\n-Tile Completion: %.2f%%\n-Time Remaining: %s\n", w.Id.Load(), w.TotalMines, exploed, WORLD_TILE_COUNT, swept, float32(exploed)*100.0/float32(w.TotalMines), float32(swept)*100.0/float32(WORLD_TILE_COUNT), time.Until(time.Unix(w.Expires, 0)))
+	exploed := w.RemainingMines.Load()
+	swept := w.RemainingTiles.Load()
+	fmt.Fprintf(wr, "World ID: %d\n-Total Mines: %d\n-Exploded Mines: %d\n-Total Tiles: %d\n-SweptTiles: %d\n-Mine Completion: %.2f%%\n-Tile Completion: %.2f%%\n-Time Remaining: %s\n", w.Id.Load(), w.TotalMines, exploed, C.WORLD_TILE_COUNT, swept, float32(exploed)*100.0/float32(w.TotalMines), float32(swept)*100.0/float32(C.WORLD_TILE_COUNT), time.Until(time.Unix(w.Expires, 0)))
 }

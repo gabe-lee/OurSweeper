@@ -13,9 +13,9 @@ import (
 
 	"github.com/gabe-lee/OurSweeper/ansi"
 	"github.com/gabe-lee/OurSweeper/data_buffer"
+	"github.com/gabe-lee/OurSweeper/internal/utility_package"
 	"github.com/gabe-lee/OurSweeper/lock"
 	"github.com/gabe-lee/OurSweeper/utils"
-	"github.com/gabe-lee/OurSweeper/wire"
 )
 
 type (
@@ -30,6 +30,7 @@ type (
 	ErrorBuffer     = utils.ErrorBuffer
 	MiniLock        = lock.MiniLock
 	ReadWriteSeeker = io.ReadWriteSeeker
+	UtilityPackage  = utility_package.UtilityPackage
 )
 
 const (
@@ -75,8 +76,6 @@ const (
 const (
 	offLogId = 0
 )
-
-var bin = wire.LE
 
 var exNewline = [1]byte{newline}
 
@@ -129,13 +128,13 @@ type Logger struct {
 	metadataLock  MiniLock
 	fileLock      MiniLock
 	consoleLock   MiniLock
-	ready_buffers chan StringBuffer
+	utility       *UtilityPackage
 	errs          ErrorBuffer
 }
 
 var metadataInit = [...]byte{0, 0, 0, 0, 0, 0, 0, 0}
 
-func NewLogger(outputDir string, masterDir string, consoleWriter Writer, bufferPool int) Logger {
+func NewLogger(outputDir string, masterDir string, consoleWriter Writer, utility *UtilityPackage) Logger {
 	cwd, _ := os.Getwd()
 	n := []byte(nameFill)
 	nLen := min(len(masterDir), maxNameLen)
@@ -145,14 +144,11 @@ func NewLogger(outputDir string, masterDir string, consoleWriter Writer, bufferP
 		masterDir:     masterDir,
 		masterLine:    string(n),
 		consoleWriter: consoleWriter,
-		ready_buffers: make(chan StringBuffer, bufferPool),
+		utility:       utility,
 		todayFileName: data_buffer.NewWriteBuffer(initCap),
-		errs:          utils.NewErrorBuffer(consoleWriter, initCap),
+		errs:          utils.NewErrorBuffer(consoleWriter, utility.WriteBufferPool.GetBuffer(64)),
 	}
 	defer l.errs.Flush("logger error .NewLogger(): ")
-	for range bufferPool {
-		l.ready_buffers <- data_buffer.NewWriteBuffer(initCap)
-	}
 	fullMaster := path.Join(l.outDir, masterDir)
 	err := os.MkdirAll(fullMaster, logFileDirPerms)
 	l.errs.IfErrAddErrWithStr(err, "could not verify or create log directory `%s`", fullMaster)
@@ -167,7 +163,8 @@ func NewLogger(outputDir string, masterDir string, consoleWriter Writer, bufferP
 	var arr [8]byte
 	_, err = l.metaFile.ReadAt(arr[:], offLogId)
 	l.errs.IfErrAddErrWithStr(err, "unable to read log id counter in `%s` file", metaFile)
-	bin.Read64(&arr, &l.log_id)
+	rdr := data_buffer.NewReadBuffer(arr[:])
+	rdr.U64_LE(&l.log_id)
 	now := time.Now()
 	date := buildDate(now)
 	y1, y2, m, d := unbuildDate(date)
@@ -213,124 +210,139 @@ func (l *Logger) Close() {
 	defer l.errs.Flush("error Logger.Close(): ")
 	l.errs.IfErrAddErr(l.file.Close())
 	l.errs.IfErrAddErr(l.metaFile.Close())
-	close(l.ready_buffers)
+	l.errs.Close()
 }
 
-func (l *Logger) Fatal(format string, args ...any) {
+func (l *Logger) Fatal(format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.Fatal(): ")
-	l.log(nil, FATAL, nil, format, args...)
-	os.Exit(1)
+	logId = l.log(nil, FATAL, nil, format, args...)
+	return
 }
 
-func (l *Logger) Error(format string, args ...any) {
+func (l *Logger) Error(format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.Error(): ")
-	l.log(nil, ERROR, nil, format, args...)
+	logId = l.log(nil, ERROR, nil, format, args...)
+	return
 }
 
-func (l *Logger) Warn(format string, args ...any) {
+func (l *Logger) Warn(format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.Warn(): ")
-	l.log(nil, WARN, nil, format, args...)
+	logId = l.log(nil, WARN, nil, format, args...)
+	return
 }
 
-func (l *Logger) Note(format string, args ...any) {
+func (l *Logger) Note(format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.Note(): ")
-	l.log(nil, NOTE, nil, format, args...)
+	logId = l.log(nil, NOTE, nil, format, args...)
+	return
 }
 
-func (l *Logger) Info(format string, args ...any) {
+func (l *Logger) Info(format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.Info(): ")
-	l.log(nil, INFO, nil, format, args...)
+	logId = l.log(nil, INFO, nil, format, args...)
+	return
 }
 
-func (l *Logger) Norm(format string, args ...any) {
+func (l *Logger) Norm(format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.Norm(): ")
-	l.log(nil, LOG, nil, format, args...)
+	logId = l.log(nil, LOG, nil, format, args...)
+	return
 }
 
-func (l *Logger) FatalIfErr(err error, format string, args ...any) {
+func (l *Logger) FatalIfErr(err error, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.FatalIfErr(): ")
 	if err != nil {
-		l.log(nil, FATAL, err, format, args...)
-		os.Exit(1)
+		logId = l.log(nil, FATAL, err, format, args...)
 	}
+	return
 }
 
-func (l *Logger) ErrorIfErr(err error, format string, args ...any) {
+func (l *Logger) ErrorIfErr(err error, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.ErrorIfErr(): ")
 	if err != nil {
-		l.log(nil, WARN, err, format, args...)
+		logId = l.log(nil, WARN, err, format, args...)
 	}
+	return
 }
 
-func (l *Logger) WarnIfErr(err error, format string, args ...any) {
+func (l *Logger) WarnIfErr(err error, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.WarnIfErr(): ")
 	if err != nil {
-		l.log(nil, WARN, err, format, args...)
+		logId = l.log(nil, WARN, err, format, args...)
 	}
+	return
 }
 
-func (l *Logger) NoteIfErr(err error, format string, args ...any) {
+func (l *Logger) NoteIfErr(err error, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.NoteIfErr(): ")
 	if err != nil {
-		l.log(nil, NOTE, err, format, args...)
+		logId = l.log(nil, NOTE, err, format, args...)
 	}
+	return
 }
 
-func (l *Logger) InfoIfErr(err error, format string, args ...any) {
+func (l *Logger) InfoIfErr(err error, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.InfoIfErr(): ")
 	if err != nil {
-		l.log(nil, INFO, err, format, args...)
+		logId = l.log(nil, INFO, err, format, args...)
 	}
+	return
 }
 
-func (l *Logger) NormIfErr(err error, format string, args ...any) {
+func (l *Logger) NormIfErr(err error, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.NormIfErr(): ")
 	if err != nil {
-		l.log(nil, LOG, err, format, args...)
+		logId = l.log(nil, LOG, err, format, args...)
 	}
+	return
 }
 
-func (l *Logger) FatalIfTrue(cond bool, format string, args ...any) {
+func (l *Logger) FatalIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.FatalIfTrue(): ")
 	if cond {
-		l.log(nil, FATAL, nil, format, args...)
-		os.Exit(1)
+		logId = l.log(nil, FATAL, nil, format, args...)
 	}
+	return
 }
 
-func (l *Logger) ErrorIfTrue(cond bool, format string, args ...any) {
+func (l *Logger) ErrorIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.ErrorIfTrue(): ")
 	if cond {
-		l.log(nil, WARN, nil, format, args...)
+		logId = l.log(nil, WARN, nil, format, args...)
 	}
+	return
 }
 
-func (l *Logger) WarnIfTrue(cond bool, format string, args ...any) {
+func (l *Logger) WarnIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.WarnIfTrue(): ")
 	if cond {
-		l.log(nil, WARN, nil, format, args...)
+		logId = l.log(nil, WARN, nil, format, args...)
 	}
+	return
 }
 
-func (l *Logger) NoteIfTrue(cond bool, format string, args ...any) {
+func (l *Logger) NoteIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.NoteIfTrue(): ")
 	if cond {
-		l.log(nil, NOTE, nil, format, args...)
+		logId = l.log(nil, NOTE, nil, format, args...)
 	}
+	return
 }
 
-func (l *Logger) InfoIfTrue(cond bool, format string, args ...any) {
+func (l *Logger) InfoIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.InfoIfTrue(): ")
 	if cond {
-		l.log(nil, INFO, nil, format, args...)
+		logId = l.log(nil, INFO, nil, format, args...)
 	}
+	return
 }
 
-func (l *Logger) NormIfTrue(cond bool, format string, args ...any) {
+func (l *Logger) NormIfTrue(cond bool, format string, args ...any) (logId uint64) {
 	defer l.errs.Flush("error Logger.NormIfTrue(): ")
 	if cond {
-		l.log(nil, LOG, nil, format, args...)
+		logId = l.log(nil, LOG, nil, format, args...)
 	}
+	return
 }
 
 func (l *Logger) checkTodaysLog(sl *SubLogger, now time.Time) (y1, y2, m, d byte) {
@@ -398,11 +410,8 @@ func (l *Logger) makeTodayFileName(buf *StringBuffer, dir string, y1, y2, m, d b
 func (l *Logger) log(sl *SubLogger, mode int, err error, format string, args ...any) (logId uint64) {
 	now := time.Now()
 	y1, y2, m, d := l.checkTodaysLog(sl, now)
-	buf := <-l.ready_buffers
-	buf.Reset()
-	defer func() {
-		l.ready_buffers <- buf
-	}()
+	buf := l.utility.WriteBufferPool.GetBufferByClass(data_buffer.Class_256)
+	defer buf.Close()
 	name := l.masterLine
 	if sl != nil {
 		name = sl.name
@@ -430,10 +439,10 @@ func (l *Logger) log(sl *SubLogger, mode int, err error, format string, args ...
 	buf.WriteByte(idPrefix)
 	id := atomic.AddUint64(&l.log_id, 1)
 	idBytes, _ := utils.QuickIntToHexString(id)
-	buf.WriteBytes(idBytes[:]...)
+	buf.U8_Slice(idBytes[:])
 	buf.WriteByte(close_brack)
 	buf.WriteByte(space)
-	fmt.Fprintf(&buf, format, args...)
+	fmt.Fprintf(buf, format, args...)
 	if err != nil {
 		buf.WriteBytes(colon, space)
 		buf.WriteString(err.Error())
@@ -476,9 +485,11 @@ func (l *Logger) log(sl *SubLogger, mode int, err error, format string, args ...
 		var arr [8]byte
 		_, err = l.metaFile.ReadAt(arr[:], offLogId)
 		l.WarnIfErr(err, "failed to read metadata file value at offset %d (logId)", offLogId)
-		bin.Read64(&arr, &oldId)
+		rdr := data_buffer.NewReadBuffer(arr[:])
+		rdr.U64_LE(&oldId)
 		if newId > oldId {
-			bin.Write64(newId, &arr)
+			wtr := data_buffer.NewWriteBufferFilled(arr[:0])
+			wtr.U64_LE(newId)
 			_, err = l.metaFile.WriteAt(arr[:], offLogId)
 			l.WarnIfErr(err, "failed to write metadata file value at offset %d (logId)", offLogId)
 		}

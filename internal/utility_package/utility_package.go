@@ -1,4 +1,4 @@
-package server_utility
+package utility_package
 
 import "github.com/gabe-lee/OurSweeper/data_buffer"
 
@@ -6,12 +6,12 @@ type (
 	WriteBufferPool = data_buffer.WriteBufferPool
 )
 
-type ServerUtility struct {
+type UtilityPackage struct {
 	WriteBufferPool *WriteBufferPool
 }
 
-func NewServerUtility() ServerUtility {
-	return ServerUtility{
+func NewServerUtility() UtilityPackage {
+	return UtilityPackage{
 		WriteBufferPool: data_buffer.NewWriteBufferPool(),
 	}
 }

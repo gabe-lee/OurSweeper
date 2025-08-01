@@ -2,6 +2,8 @@ package common
 
 import (
 	"math/bits"
+
+	C "github.com/gabe-lee/OurSweeper/internal/consts"
 )
 
 // type RelativeCoordBlock struct {
@@ -49,7 +51,7 @@ type CascadeQueue struct {
 
 func NewCascadeQueue(center Coord) CascadeQueue {
 	queue := CascadeQueue{
-		ToCheckList: INIT_NEAR_8,
+		ToCheckList: C.INIT_NEAR_8,
 		Center:      center,
 		Idx:         0,
 	}
@@ -65,19 +67,19 @@ func (q *CascadeQueue) NextToCheck() (coord CascadeCoord, ok bool) {
 	if q.Idx >= 64 {
 		return coord, false
 	}
-	nextMask := INIT_FULL_U64 << q.Idx
+	nextMask := C.INIT_FULL_U64 << q.Idx
 	toCheck := q.ToCheckList & nextMask
 	if toCheck == 0 {
 		return coord, false
 	}
 	coord.RelativeIdx = uint64(bits.TrailingZeros64(toCheck))
 	q.Idx = coord.RelativeIdx + 1
-	coord.Pos = q.Center.Add(NearCoordTable[coord.RelativeIdx])
+	coord.Pos = q.Center.Add(C.NearCoordTable[coord.RelativeIdx])
 	return coord, true
 }
 
 func (q *CascadeQueue) AddCascade(coord CascadeCoord) {
-	checkBits := NearBitsTable[coord.RelativeIdx]
+	checkBits := C.NearBitsTable[coord.RelativeIdx]
 	q.ToCheckList |= checkBits
 }
 

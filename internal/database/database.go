@@ -14,7 +14,8 @@ import (
 	"github.com/gabe-lee/OurSweeper/coord"
 	"github.com/gabe-lee/OurSweeper/env_loader"
 	"github.com/gabe-lee/OurSweeper/internal/common"
-	"github.com/gabe-lee/OurSweeper/internal/server_utility"
+	C "github.com/gabe-lee/OurSweeper/internal/consts"
+	"github.com/gabe-lee/OurSweeper/internal/utility_package"
 	"github.com/gabe-lee/OurSweeper/logger"
 )
 
@@ -27,7 +28,7 @@ type (
 	SubLoggerWriter = logger.SubLoggerWriter
 	ServerWorld     = common.ServerWorld
 	Tile            = common.Tile
-	ServerUtility   = server_utility.ServerUtility
+	ServerUtility   = utility_package.UtilityPackage
 )
 
 const (
@@ -55,10 +56,6 @@ DROP TABLE IF EXISTS participation;
 DROP TABLE IF EXISTS flags;
 DROP TABLE IF EXISTS worlds;
 `
-)
-
-const (
-	shutdownFlag uint32 = 4 //MUST match server.SHUT_DATABASE, but cannot import it
 )
 
 const (
@@ -164,8 +161,11 @@ CREATE TABLE worlds (
   cleared_at INTEGER NOT NULL,
   expired INTEGER DEFAULT 0 NOT NULL,
   cleared INTEGER DEFAULT 0 NOT NULL,
-  participants INTEGER DEFAULT 0 NOT NULL,
-  total_score INTEGER DEFAULT 0 NOT NULL
+  total_users INTEGER DEFAULT 0 NOT NULL,
+  total_score INTEGER DEFAULT 0 NOT NULL,
+  total_mines INTEGER NOT NULL,
+  remaining_mines INTEGER NOT NULL,
+  remaining_spaces INTEGER NOT NULL
 );
 
 CREATE TABLE chunks (
@@ -317,8 +317,9 @@ func (s *SweepDB) SetPropStr(code int, str string) error {
 }
 
 const DB_QUERY_CREATE_WORLD string = `
-INSERT INTO worlds (seed_a, seed_b, difficulty, created_at, expires_at, cleared_at)
-VALUES ($1, $2, $3, $4, $5, $5) RETURNING id;`
+INSERT INTO worlds (seed_a, seed_b, difficulty, created_at, expires_at, cleared_at, total_mines, remaining_mines, remaining_spaces)
+VALUES ($1, $2, $3, $4, $5, $5, &6, $6, $7)
+RETURNING id;`
 
 func (s *SweepDB) CreateNewWorld(world *ServerWorld, difficulty byte) {
 	timeGo := time.Now()
@@ -326,13 +327,16 @@ func (s *SweepDB) CreateNewWorld(world *ServerWorld, difficulty byte) {
 	expires := timeGo.Add(time.Hour * 24).Unix()
 	var seed_a uint64 = *(*uint64)(unsafe.Pointer(&created))
 	var seed_b uint64 = *(*uint64)(unsafe.Pointer(&expires))
-	worldRow := s.db.QueryRow(DB_QUERY_CREATE_WORLD, seed_a, seed_b, difficulty, created, expires, expires)
-	var worldId uint32
-	err := worldRow.Scan(&worldId)
-	s.log.FatalIfErr(err, "unable to create new world")
+	var worldId uint64
 	world.InitNew(worldId, difficulty, expires, seed_a, seed_b)
-	result := attempt_group.NewWithTimeout("create chunks for new world", time.Second*10, int64(common.WORLD_CHUNK_COUNT))
-	for idx := range common.WORLD_CHUNK_COUNT {
+	worldRow := s.db.QueryRow(DB_QUERY_CREATE_WORLD, seed_a, seed_b, difficulty, created, expires, expires, world.TotalMines, C.INITIAL_OPAQUE_TILES)
+	err := worldRow.Scan(&worldId)
+	if s.log.FatalIfErr(err, "unable to create new world") != 0 {
+		return
+	}
+	world.Id.Store(worldId)
+	result := attempt_group.NewWithTimeout("create chunks for new world", time.Second*10, int64(C.WORLD_CHUNK_COUNT))
+	for idx := range C.WORLD_CHUNK_COUNT {
 		go s.CreateChunk(&result, world, idx)
 	}
 	s.log.WarnIfErr(result.Wait(), "failed to create all new chunks in database")
@@ -376,8 +380,8 @@ func (s *SweepDB) UpdateChunk(result *AttemptGroup, world *ServerWorld, idx int)
 }
 
 func (s *SweepDB) UpdateAllChunks(world *ServerWorld) {
-	result := attempt_group.NewWithTimeout("UpdateAllChunks", time.Second*10, int64(common.WORLD_CHUNK_COUNT))
-	for idx := range common.WORLD_CHUNK_COUNT {
+	result := attempt_group.NewWithTimeout("UpdateAllChunks", time.Second*10, int64(C.WORLD_CHUNK_COUNT))
+	for idx := range C.WORLD_CHUNK_COUNT {
 		go s.UpdateChunk(&result, world, idx)
 	}
 	s.log.WarnIfErr(result.Wait(), "failed to update all chunks in database")
@@ -400,45 +404,46 @@ func (s *SweepDB) LoadAllChunks(world *ServerWorld) {
 	for rows.Next() {
 		err = rows.Scan(&idx, &data)
 		s.log.WarnIfErr(err, "failed to scan chunk data")
-		cPos := coord.CoordFromIndex(idx, common.CY_SHIFT, common.CX_MASK)
-		tTopLeft := cPos.ShiftUpScalar(common.TILE_TO_LOCK_SHIFT)
+		cPos := coord.CoordFromIndex(idx, C.CY_SHIFT, C.CX_MASK)
+		tTopLeft := cPos.ShiftUpScalar(C.TILE_TO_LOCK_SHIFT)
 		bIdx := 0
-		for y := range common.WORLD_TILES_PER_CHUNK_AXIS {
-			for x := range common.WORLD_TILES_PER_CHUNK_AXIS {
+		for y := range C.WORLD_TILES_PER_CHUNK_AXIS {
+			for x := range C.WORLD_TILES_PER_CHUNK_AXIS {
 				tPos := tTopLeft.AddXY(x, y)
-				tIdx := tPos.ToIndex(common.TY_SHIFT)
+				tIdx := tPos.ToIndex(C.TY_SHIFT)
 				world.Tiles[tIdx] = Tile(data[bIdx])
 				bIdx += 1
 			}
 		}
 		cnt += 1
 	}
-	if cnt != common.WORLD_CHUNK_COUNT {
-		s.log.Warn("only loaded %d/%d chunks from database for world %d", cnt, common.WORLD_CHUNK_COUNT, id)
+	if cnt != C.WORLD_CHUNK_COUNT {
+		s.log.Warn("only loaded %d/%d chunks from database for world %d", cnt, C.WORLD_CHUNK_COUNT, id)
 	}
 }
 
-const DB_QUERY_GET_ACTIVE_WORLD string = `
-SELECT id, expires_at, participants, total_score
+const DB_QUERY_GET_ACTIVE_WORLDS_FOR_DIFFICULTY string = `
+SELECT id, expires_at, total_users, total_score
 FROM worlds
 WHERE expired=0 AND cleared=0 AND difficulty=$1;`
 
 func (s *SweepDB) GetActiveWorld(world *ServerWorld, difficulty byte) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	row := s.db.QueryRowContext(ctx, DB_QUERY_GET_ACTIVE_WORLD, difficulty)
-	var id, part, score uint32
+	row := s.db.QueryRowContext(ctx, DB_QUERY_GET_ACTIVE_WORLDS_FOR_DIFFICULTY, difficulty)
+	var totalUsers, score int32
+	var id uint64
 	err := row.Scan(
 		&id,
 		&world.Expires,
-		&part,
+		&totalUsers,
 		&score,
 	)
 	if err != nil {
 		return false
 	}
 	world.Id.Store(id)
-	world.Participants.Store(part)
+	world.TotalUsers.Store(totalUsers)
 	world.Score.Store(score)
 	return err == nil
 }

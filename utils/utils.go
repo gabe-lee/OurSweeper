@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	StringBuffer = data_buffer.WriteBuffer
+	WriteBuffer = data_buffer.WriteBuffer
 )
 
 type ErrorChecker struct {
@@ -55,80 +55,84 @@ func (e *ErrorCollector) AddFmt(format string, args ...any) {
 }
 
 type ErrorBuffer struct {
-	strBuf StringBuffer
+	buf    *WriteBuffer
 	writer io.Writer
 }
 
-func NewErrorBuffer(writer io.Writer, initCap int) ErrorBuffer {
+func NewErrorBuffer(writer io.Writer, buf *WriteBuffer) ErrorBuffer {
 	return ErrorBuffer{
-		strBuf: data_buffer.NewWriteBuffer(initCap),
+		buf:    buf,
 		writer: writer,
 	}
 }
 
 func (eb *ErrorBuffer) addLine() {
-	eb.strBuf.WriteBytes('\n', ' ', 0xE2, 0x86, 0xB3, ' ') // ↳
+	eb.buf.WriteBytes('\n', ' ', 0xE2, 0x86, 0xB3, ' ') // ↳
 }
 
 func (eb *ErrorBuffer) IfErrAddErr(err error) {
 	if err != nil {
 		eb.addLine()
-		eb.strBuf.WriteString(err.Error())
+		eb.buf.WriteString(err.Error())
 	}
 }
 
 func (eb *ErrorBuffer) IfErrAddErrWithStr(err error, format string, args ...any) {
 	if err != nil {
 		eb.addLine()
-		eb.strBuf.WriteString(err.Error())
+		eb.buf.WriteString(err.Error())
 		eb.addLine()
-		fmt.Fprintf(&eb.strBuf, format, args...)
+		fmt.Fprintf(eb.buf, format, args...)
 	}
 }
 
 func (eb *ErrorBuffer) AddStr(format string, args ...any) {
 	eb.addLine()
-	fmt.Fprintf(&eb.strBuf, format, args...)
+	fmt.Fprintf(eb.buf, format, args...)
 }
 
 func (eb *ErrorBuffer) BytesRef() []byte {
-	return eb.strBuf.BytesRef()
+	return eb.buf.BytesRef()
 }
 
 func (eb *ErrorBuffer) BytesCopy() []byte {
-	return eb.strBuf.BytesCopy()
+	return eb.buf.BytesCopy()
 }
 
 func (eb *ErrorBuffer) StringCopy() string {
-	return eb.strBuf.StringCopy()
+	return eb.buf.StringCopy()
 }
 
 func (eb *ErrorBuffer) Error() string {
-	return eb.strBuf.StringCopy()
+	return eb.buf.StringCopy()
 }
 
 func (eb *ErrorBuffer) Clear() {
-	eb.strBuf.Reset()
+	eb.buf.Reset()
 }
 
 func (eb *ErrorBuffer) Flush(prefix string) {
 	if eb.Len() > 0 {
 		eb.writer.Write([]byte(prefix))
-		eb.writer.Write(eb.strBuf.BytesRef())
-		eb.strBuf.Reset()
+		eb.writer.Write(eb.buf.BytesRef())
+		eb.buf.Reset()
 	}
 }
 
 func (eb *ErrorBuffer) Len() int {
-	return eb.strBuf.Len()
+	return eb.buf.Len()
 }
 
 func (eb *ErrorBuffer) Cap() int {
-	return eb.strBuf.Cap()
+	return eb.buf.Cap()
 }
 
 func (eb *ErrorBuffer) EnsureSpace(pool *data_buffer.WriteBufferPool, space int) {
-	eb.strBuf.EnsureSpace(pool, space)
+	eb.buf.EnsureSpace(space)
+}
+
+func (eb *ErrorBuffer) Close() error {
+	return eb.buf.Close()
 }
 
 var QuickItoA = [100]string{

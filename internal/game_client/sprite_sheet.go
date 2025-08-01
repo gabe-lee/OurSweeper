@@ -1,0 +1,44 @@
+package game_client
+
+import (
+	C "github.com/gabe-lee/OurSweeper/internal/consts"
+)
+
+const (
+	SPRITE_TILE_EMPTY  = C.ICON_CODE_0
+	SPRITE_TILE_1      = C.ICON_CODE_1
+	SPRITE_TILE_2      = C.ICON_CODE_2
+	SPRITE_TILE_3      = C.ICON_CODE_3
+	SPRITE_TILE_4      = C.ICON_CODE_4
+	SPRITE_TILE_5      = C.ICON_CODE_5
+	SPRITE_TILE_6      = C.ICON_CODE_6
+	SPRITE_TILE_7      = C.ICON_CODE_7
+	SPRITE_TILE_8      = C.ICON_CODE_8
+	SPRITE_TILE_FLAG   = C.ICON_CODE_FLAG
+	SPRITE_TILE_BOMB   = C.ICON_CODE_BOMB
+	SPRITE_TILE_OPAQUE = C.ICON_CODE_OPAQUE
+	SPRITE_PANEL_DARK  = 9
+	SPRITE_PANEL_LIGHT = 10
+)
+
+var (
+	SPRITE = [...]Vec2_Int{
+		SPRITE_TILE_EMPTY:  Vec2_Int{X: 0 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_1:      Vec2_Int{X: 1 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_2:      Vec2_Int{X: 2 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_3:      Vec2_Int{X: 3 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_4:      Vec2_Int{X: 4 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_5:      Vec2_Int{X: 5 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_6:      Vec2_Int{X: 6 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_7:      Vec2_Int{X: 7 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_8:      Vec2_Int{X: 8 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_FLAG:   Vec2_Int{X: 9 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_BOMB:   Vec2_Int{X: 10 * C.TILE_SIZE, Y: 0},
+		SPRITE_TILE_OPAQUE: Vec2_Int{X: 11 * C.TILE_SIZE, Y: 0},
+		SPRITE_PANEL_DARK:  Vec2_Int{X: 0 * C.TILE_SIZE, Y: C.TILE_SIZE},
+		SPRITE_PANEL_LIGHT: Vec2_Int{X: 1 * C.TILE_SIZE, Y: C.TILE_SIZE},
+	}
+
+	SPRITE_PANEL_MARGIN = Vec2_Int{X: 4, Y: 4}
+	SPRITE_SIZE         = Vec2_Int{X: C.TILE_SIZE, Y: C.TILE_SIZE}
+)

@@ -7,9 +7,8 @@ import (
 
 	"github.com/gabe-lee/OurSweeper/data_buffer"
 	"github.com/gabe-lee/OurSweeper/internal/user_token"
-	C "github.com/gabe-lee/OurSweeper/internal/wire_codes"
+	MSG "github.com/gabe-lee/OurSweeper/internal/wire_codes"
 	"github.com/gabe-lee/OurSweeper/token"
-	"github.com/gabe-lee/OurSweeper/wire"
 	"github.com/gobwas/ws"
 	"github.com/google/uuid"
 )
@@ -28,13 +27,12 @@ const (
 func (n *WebNetwork) StartGameConn(conn net.Conn) {
 	refreshDeadline(conn)
 	var closeFrame []byte = ws.CompiledCloseNormalClosure
-	var readWire wire.Incoming
-	var writeWire wire.Outgoing
 	var err error
 	var inHeader ws.Header
 	var msgcode uint32
-	var buffer *data_buffer.WriteBuffer = n.utils.WriteBufferPool.GetBufferByClass(data_buffer.Class_128)
-	defer n.CloseConn(conn, &closeFrame, buffer)
+	var writer *data_buffer.WriteBuffer = n.utils.WriteBufferPool.GetBufferByClass(data_buffer.Class_128)
+	var reader data_buffer.ReadBuffer
+	defer n.CloseConn(conn, &closeFrame, writer)
 	for {
 		select {
 		case <-n.shutdownSig:
@@ -78,41 +76,46 @@ func (n *WebNetwork) StartGameConn(conn net.Conn) {
 			refreshDeadline(conn)
 			continue
 		}
-		buffer.Reset()
-		readWire = wire.NewIncomingAdv(conn, wire.LE, nil, inHeader.Mask[:], int(inHeader.Length))
-		writeWire = wire.NewOutgoingAdv(buffer, wire.LE, nil, nil, math.MaxInt)
-		readWire.U32(&msgcode)
-		if n.HasReadErr(readWire.Err, conn, &closeFrame) {
+		writer.Reset()
+		_, err = writer.ReadNFrom(conn, int(inHeader.Length))
+		if n.HasWriteErr(err, conn, &closeFrame) {
+			return
+		}
+		ws.Cipher(writer.BytesRef(), inHeader.Mask, 0)
+		reader = writer.ReaderRef()
+		err = reader.U32_LE(&msgcode)
+		if n.HasReadErr(err, conn, &closeFrame) {
 			return
 		}
 		switch msgcode {
-		case C.CLIENT_ANON_TOKEN_NEW:
+		case MSG.CLIENT_ANON_TOKEN_NEW:
+			writer.Reset()
+			writer.U32_LE(MSG.SERVER_ANON_TOKEN_NEW)
 			id, err := uuid.NewRandom()
 			if err != nil {
-				writeWire.U32(C.SERVER_ERROR)
-				n.finishWritingMessage(conn, buffer, &closeFrame)
-				continue
+				if n.ReturnErrorMessage(conn, writer, MSG.ERR_S_INTERNAL_SERVER_ERROR, &closeFrame, "failed to create UUID for AnonToken") {
+					continue
+				}
+				return
 			}
-			userToken := user_token.UserStats{
+			userStats := user_token.UserStats{
 				UUID:    id,
 				Version: user_token.CurrentVer,
 			}
-			err = token.Create(n.env.tokenSecret, &userToken, buffer)
-			if err != nil {
-				writeWire.U32(C.SERVER_ERROR)
-				n.finishWritingMessage(conn, buffer, &closeFrame)
-				continue
-			}
-			writeWire.U32(C.SERVER_ANON_TOKEN_NEW)
-			n.finishWritingMessage(conn, buffer, &closeFrame)
-			continue
-		case C.CLIENT_GET_ACTIVE_WORLDS:
+			token.Create(n.env.tokenSecret, &userStats, writer)
+			n.FinishWritingMessage(conn, writer, &closeFrame)
+		case MSG.CLIENT_ANON_TOKEN_LOGIN:
 			//TODO
 			//CHECKPOINT
+		case MSG.CLIENT_GET_ACTIVE_WORLDS:
+			writer.Reset()
+			writer.U32_LE(MSG.SERVER_SEND_ACTIVE_WORLDS)
+			response := n.worlds.GetActiveWorldsResponse()
+			writer.Writable(&response)
+			n.FinishWritingMessage(conn, writer, &closeFrame)
 		default:
-			writeWire.U32(C.SERVER_INVALID)
-			n.finishWritingMessage(conn, buffer, &closeFrame)
-			continue
+			writer.U32_LE(MSG.SERVER_INVALID)
+			n.FinishWritingMessage(conn, writer, &closeFrame)
 		}
 	}
 }
@@ -145,7 +148,7 @@ func refreshDeadline(conn net.Conn) {
 	conn.SetDeadline(time.Now().Add(ConnTimeout))
 }
 
-func (n *WebNetwork) finishWritingMessage(conn net.Conn, buf *data_buffer.WriteBuffer, closeFrame *[]byte) (success bool) {
+func (n *WebNetwork) FinishWritingMessage(conn net.Conn, buf *data_buffer.WriteBuffer, closeFrame *[]byte) (success bool) {
 	outHeader := ws.Header{
 		OpCode: ws.OpBinary,
 		Fin:    true,
@@ -156,6 +159,26 @@ func (n *WebNetwork) finishWritingMessage(conn net.Conn, buf *data_buffer.WriteB
 		return false
 	}
 	_, err = conn.Write(buf.BytesRef())
+	return !n.HasWriteErr(err, conn, closeFrame)
+}
+
+var ErrHeader = ws.Header{
+	OpCode: ws.OpBinary,
+	Fin:    true,
+	Length: 16,
+}
+var ErrHeaderPayload = make([]byte, 16)
+var CompiledErrHeader = ws.MustCompileFrame(ws.Frame{Header: ErrHeader, Payload: ErrHeaderPayload})
+
+func (n *WebNetwork) ReturnErrorMessage(conn net.Conn, buf *data_buffer.WriteBuffer, errReasonCode uint32, closeFrame *[]byte, logFormat string, logArgs ...any) (success bool) {
+	buf.Reset()
+	buf.Write(CompiledErrHeader)
+	buf.SetLenRelative(-16)
+	buf.U32_LE(MSG.SERVER_ERROR)
+	buf.U32_LE(errReasonCode)
+	logid := n.log.Error(logFormat, logArgs...)
+	buf.U64_LE(logid)
+	_, err := conn.Write(buf.BytesRef())
 	if n.HasWriteErr(err, conn, closeFrame) {
 		return false
 	}

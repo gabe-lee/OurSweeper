@@ -1,5 +1,9 @@
 package common
 
+import (
+	C "github.com/gabe-lee/OurSweeper/internal/consts"
+)
+
 // const (
 // 	ICON_0      = " "
 // 	ICON_1      = ansi.FG_BLU + "1" + ansi.CLEAR
@@ -17,14 +21,15 @@ package common
 // )
 
 type ClientWorld struct {
-	Id            uint32
-	Score         uint32
-	Tiles         [WORLD_TILE_COUNT]byte
-	TotalMines    uint32
-	ExplodedMines uint32
-	SweptTiles    uint32
-	Ended         bool
-	Expires       int64
+	Id             uint64
+	Score          uint32
+	Tiles          [C.WORLD_TILE_COUNT]byte
+	TotalMines     int32
+	RemainingMines int32
+	RemainingTiles int32
+	Ended          bool
+	CurrentUsers   int32
+	Expires        int64
 }
 
 // // This is NOT safe for concurrent use when world is being played on,

@@ -1,4 +1,4 @@
-package common
+package game_client
 
 import (
 	"bytes"
@@ -7,86 +7,52 @@ import (
 	"log"
 
 	"github.com/gabe-lee/OurSweeper/coord"
+	"github.com/gabe-lee/OurSweeper/data_buffer"
+	"github.com/gabe-lee/OurSweeper/internal/active_worlds_response"
 	"github.com/gabe-lee/OurSweeper/internal/common"
+	C "github.com/gabe-lee/OurSweeper/internal/consts"
+	"github.com/gabe-lee/OurSweeper/internal/user_token"
 	MSG "github.com/gabe-lee/OurSweeper/internal/wire_codes"
 	"github.com/gabe-lee/OurSweeper/logger"
-	"github.com/gabe-lee/OurSweeper/wire"
+	"github.com/gabe-lee/OurSweeper/scrap/wire"
+	"github.com/gabe-lee/OurSweeper/token"
+	"github.com/gabe-lee/OurSweeper/vec2"
 	"github.com/gabe-lee/OurSweeper/xmath"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 type (
-	EbitImage   = ebiten.Image
-	ClientWorld = common.ClientWorld
-	ServerWorld = common.ServerWorld
-	SweepResult = common.SweepResult
-	Coord       = coord.Coord[int]
-	ByteCoord   = coord.Coord[byte]
-)
-
-const (
-	CLIENT_RECIEVE_MESSAGE_BUFFER_LEN int = 32
-	CLIENT_SEND_MESSAGE_BUFFER_LEN    int = 4
-
-	TY_SHIFT          = common.TY_SHIFT
-	TX_MASK           = common.TX_MASK
-	WORLD_TILE_COUNT  = common.WORLD_TILE_COUNT
-	WORLD_TILE_WIDTH  = common.WORLD_TILE_WIDTH
-	WORLD_TILE_HEIGHT = common.WORLD_TILE_HEIGHT
-
-	TILE_SIZE         int = 32
-	TILE_SIZE_SCALED  int = TILE_SIZE / DISPLAY_SCALE_DOWN
-	TILE_SHEET_WIDTH  int = 12
-	TILE_SHEET_HEIGHT int = 4
-
-	WINDOW_WIDTH         int     = 800
-	WINDOW_HEIGHT        int     = 800
-	BOARD_WIDTH          int     = TILE_SIZE_SCALED * WORLD_TILE_WIDTH
-	BOARD_HEIGHT         int     = TILE_SIZE_SCALED * WORLD_TILE_HEIGHT
-	BOARD_OVERFLOW_X     int     = BOARD_WIDTH - WINDOW_WIDTH
-	BOARD_OVERFLOW_Y     int     = BOARD_HEIGHT - WINDOW_HEIGHT
-	MIN_BOARD_POS_X      float64 = float64(-BOARD_OVERFLOW_X)
-	MIN_BOARD_POS_Y      float64 = float64(-BOARD_OVERFLOW_Y)
-	MAX_BOARD_POS_X      float64 = 0
-	MAX_BOARD_POS_Y      float64 = 0
-	DISPLAY_SCALE_DOWN   int     = 2
-	DISPLAY_SCALE_DOWN_F float64 = float64(DISPLAY_SCALE_DOWN)
-	WHEEL_SPEED          float64 = 6.0
-)
-
-var (
-	BOARD_TILES = [16][2]int{
-		common.ICON_CODE_0:      {0, 0},
-		common.ICON_CODE_1:      {1 * TILE_SIZE, 0},
-		common.ICON_CODE_2:      {2 * TILE_SIZE, 0},
-		common.ICON_CODE_3:      {3 * TILE_SIZE, 0},
-		common.ICON_CODE_4:      {4 * TILE_SIZE, 0},
-		common.ICON_CODE_5:      {5 * TILE_SIZE, 0},
-		common.ICON_CODE_6:      {6 * TILE_SIZE, 0},
-		common.ICON_CODE_7:      {7 * TILE_SIZE, 0},
-		common.ICON_CODE_8:      {8 * TILE_SIZE, 0},
-		common.ICON_CODE_FLAG:   {9 * TILE_SIZE, 0},
-		common.ICON_CODE_BOMB:   {10 * TILE_SIZE, 0},
-		common.ICON_CODE_OPAQUE: {11 * TILE_SIZE, 0},
-	}
-	BYTE_ORDER = common.BYTE_ORDER
+	EbitImage          = ebiten.Image
+	ClientWorld        = common.ClientWorld
+	ServerWorld        = common.ServerWorld
+	SweepResult        = common.SweepResult
+	Coord              = coord.Coord[int]
+	ByteCoord          = coord.Coord[byte]
+	WriteBuffer        = data_buffer.WriteBuffer
+	UserStats          = user_token.UserStats
+	ActiveWorldsReport = active_worlds_response.ActiveWorldsReport
+	Vec2_F64           = vec2.Vec2[float64]
+	Vec2_Int           = vec2.Vec2[int]
 )
 
 //go:embed tiles.png
 var tilesPng []byte
 
 type GameClient struct {
-	World           ClientWorld
-	Atlas           *ebiten.Image
-	BoardX          float64
-	BoardY          float64
-	Input           Input
-	Score           uint32
-	Frame           uint64
-	RecieveMessages <-chan []byte
-	SendMessages    chan<- []byte
-	Log             logger.Logger
+	World              ClientWorld
+	Atlas              *ebiten.Image
+	BoardX             float64
+	BoardY             float64
+	Input              Input
+	Score              uint32
+	Frame              uint64
+	RecieveMessages    <-chan *WriteBuffer
+	SendMessages       chan<- *WriteBuffer
+	Log                logger.Logger
+	UserStats          UserStats
+	AnonToken          []byte
+	ActiveServerWorlds ActiveWorldsReport
 }
 
 type Input struct {
@@ -101,12 +67,12 @@ type Input struct {
 
 // Draw implements ebiten.Game.
 func (g *GameClient) Draw(screen *EbitImage) {
-	for i := range WORLD_TILE_COUNT {
-		tilePos := coord.CoordFromIndex(i, TY_SHIFT, TX_MASK)
-		boardPos := tilePos.MultScalar(TILE_SIZE).DivScalar(DISPLAY_SCALE_DOWN)
+	for i := range C.WORLD_TILE_COUNT {
+		tilePos := coord.CoordFromIndex(i, C.TY_SHIFT, C.TX_MASK)
+		boardPos := tilePos.MultScalar(C.TILE_SIZE).DivScalar(C.DISPLAY_SCALE_DOWN)
 		iconIdx := g.World.Tiles[i]
-		iconTopLeft := BOARD_TILES[iconIdx]
-		iconBotRight := [2]int{iconTopLeft[0] + TILE_SIZE, iconTopLeft[1] + TILE_SIZE}
+		iconTopLeft := C.BOARD_TILES[iconIdx]
+		iconBotRight := [2]int{iconTopLeft[0] + C.TILE_SIZE, iconTopLeft[1] + C.TILE_SIZE}
 		rect := image.Rect(iconTopLeft[0], iconTopLeft[1], iconBotRight[0], iconBotRight[1])
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Scale(0.5, 0.5)
@@ -121,16 +87,7 @@ func (g *GameClient) Layout(outsideWidth int, outsideHeight int) (screenWidth in
 	return outsideWidth, outsideHeight
 }
 
-func (g *GameClient) Init(world *ServerWorld, clientToServer chan<- []byte, serverToClient <-chan []byte) {
-	g.World = ClientWorld{
-		Id:            world.Id.Load(),
-		TotalMines:    world.TotalMines,
-		ExplodedMines: world.ExplodedMines.Load(),
-		SweptTiles:    world.SweptTiles.Load(),
-		Ended:         world.Ended.Load(),
-		Expires:       world.Expires,
-	}
-
+func (g *GameClient) Init(clientToServer chan<- []byte, serverToClient <-chan []byte) {
 	img, _, err := image.Decode(bytes.NewReader(tilesPng))
 	if err != nil {
 		log.Fatal(err)
@@ -156,20 +113,41 @@ func (g *GameClient) Update() error {
 		for more_messages {
 			select {
 			case msg := <-g.RecieveMessages:
-				w := wire.NewIncomingSlice(msg, wire.LE)
-				var msgCode uint32
-				w.U32(&msgCode)
-				switch msgCode {
+				defer msg.Close()
+				rdr := msg.ReaderRef()
+				var msgcode uint32
+				err := rdr.U32_LE(&msgcode)
+				if g.Log.ErrorIfErr(err, "failed to read incoming message code") != 0 {
+					continue
+				}
+				switch msgcode {
 				case MSG.SERVER_SWEEP:
 					var sweep SweepResult
-					sweep.WireRead(&w)
+					err := rdr.Readable(&sweep)
+					if g.Log.ErrorIfErr(err, "failed to read incoming sweep result") != 0 {
+						continue
+					}
 					g.Score += uint32(sweep.Score)
 					sweep.DoActionOnAllTiles(func(pos Coord, icon byte) {
-						idx := pos.ToIndex(TY_SHIFT)
+						idx := pos.ToIndex(C.TY_SHIFT)
 						g.World.Tiles[idx] = icon
 					})
+				case MSG.SERVER_ANON_TOKEN_NEW:
+					g.AnonToken = g.AnonToken[:0]
+					g.AnonToken = append(g.AnonToken, rdr.UnreadBytesRef()...)
+					var userStats user_token.UserStats
+					_, _, err = token.Open(&rdr, &userStats)
+					if g.Log.ErrorIfErr(err, "failed to open incoming anon token") != 0 {
+						continue
+					}
+					g.UserStats = userStats
+				case MSG.SERVER_SEND_ACTIVE_WORLDS:
+					err := rdr.Readable(&g.ActiveServerWorlds)
+					if g.Log.ErrorIfErr(err, "failed to read active worlds response") != 0 {
+						continue
+					}
 				default:
-					g.Log.Warn("invalid msg code: %d", msgCode)
+					g.Log.Warn("invalid msg code: %d", msgcode)
 				}
 			default:
 				more_messages = false
@@ -177,27 +155,26 @@ func (g *GameClient) Update() error {
 		}
 	}
 	{ // Update State and Send Messages
-		g.BoardX += g.Input.ScrollX * WHEEL_SPEED
-		g.BoardY += g.Input.ScrollY * WHEEL_SPEED
-		g.BoardX = xmath.Clamp(MIN_BOARD_POS_X, g.BoardX, MAX_BOARD_POS_X)
-		g.BoardY = xmath.Clamp(MIN_BOARD_POS_Y, g.BoardY, MAX_BOARD_POS_Y)
+		g.BoardX += g.Input.ScrollX * C.WHEEL_SPEED
+		g.BoardY += g.Input.ScrollY * C.WHEEL_SPEED
+		g.BoardX = xmath.Clamp(C.MIN_BOARD_POS_X, g.BoardX, C.MAX_BOARD_POS_X)
+		g.BoardY = xmath.Clamp(C.MIN_BOARD_POS_Y, g.BoardY, C.MAX_BOARD_POS_Y)
 		if g.Input.MouseLJustPressed {
 			tilePos := g.MousePosToTilePos()
-			tileIdx := tilePos.ToIndex(TY_SHIFT)
+			tileIdx := tilePos.ToIndex(C.TY_SHIFT)
 			if g.World.Tiles[tileIdx] > 8 { //FIXME make `ClientTile` type with readable methods (cheking whether tile is not swept here)
 
 				request := common.NewSweepRequest(tilePos)
 				buf := bytes.Buffer{}
 				buf.Grow(64)
-				outWire := wire.NewOutgoing(&buf, wire.LE)
-				request.WireWrite(&outWire)
+				outWire := wire.NewOutgoing(&buf, wire.LE) //FIXME
+				request.WireWrite(&outWire)                //FIXME
 				if outWire.HasErr() {
 					g.Log.Warn("failed to write SweepRequest message: %s", outWire.Err())
 				} else {
 					g.SendMessages <- buf.Bytes()
 				}
 			}
-
 		}
 	}
 
@@ -213,8 +190,8 @@ func (g *GameClient) MousePosToBoardPos() (x, y float64) {
 
 func (g *GameClient) MousePosToTilePos() (pos Coord) {
 	fx, fy := g.MousePosToBoardPos()
-	fx /= float64(TILE_SIZE_SCALED)
-	fy /= float64(TILE_SIZE_SCALED)
+	fx /= float64(C.TILE_SIZE_SCALED)
+	fy /= float64(C.TILE_SIZE_SCALED)
 	return Coord{
 		X: int(fx),
 		Y: int(fy),

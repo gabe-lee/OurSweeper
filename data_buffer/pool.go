@@ -29,8 +29,6 @@ const (
 	Size_2048  = 2048
 	Size_4096  = 4096
 	Size_Large = 4097
-
-	fallbackClass = class_1024
 )
 
 var (
@@ -140,30 +138,25 @@ func (s *WriteBufferPool) ReleaseBuffer(buf *WriteBuffer) {
 	s.pools[class].Put(buf)
 }
 
-func (s *WriteBufferPool) QuickWriteAndCopyString(sizeClass SizeClass, vals ...any) string {
+func (s *WriteBufferPool) QuickWriteTextAndCopyString(sizeClass SizeClass, vals ...any) string {
 	class := min(class_Large, max(class_64, sizeClass))
 	buf := s.GetBufferByClass(class)
 	defer s.ReleaseBuffer(buf)
-	buf.WriteAny(vals...)
+	buf.WriteText(vals...)
 	return buf.StringCopy()
 }
 
-func (s *WriteBufferPool) QuickWriteAndCopyBytes(sizeClass SizeClass, vals ...any) []byte {
+func (s *WriteBufferPool) QuickWriteTextAndCopyBytes(sizeClass SizeClass, vals ...any) []byte {
 	class := min(class_Large, max(class_64, sizeClass))
 	buf := s.GetBufferByClass(class)
 	defer s.ReleaseBuffer(buf)
-	buf.WriteAny(vals...)
+	buf.WriteText(vals...)
 	return buf.BytesCopy()
 }
 
-func (s *WriteBufferPool) QuickWrite(sizeClass SizeClass, vals ...any) *WriteBuffer {
+func (s *WriteBufferPool) QuickWriteText(sizeClass SizeClass, vals ...any) *WriteBuffer {
 	class := min(class_Large, max(class_64, sizeClass))
 	buf := s.GetBufferByClass(class)
-	buf.WriteAny(vals...)
+	buf.WriteText(vals...)
 	return buf
 }
-
-type noCopy struct{}
-
-func (*noCopy) Lock()   {}
-func (*noCopy) Unlock() {}

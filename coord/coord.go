@@ -2,13 +2,6 @@ package coord
 
 import (
 	"fmt"
-
-	"github.com/gabe-lee/OurSweeper/wire"
-)
-
-type (
-	IncomingWire = wire.Incoming
-	OutgoingWire = wire.Outgoing
 )
 
 type number interface {

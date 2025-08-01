@@ -1,0 +1,7 @@
+package game_client
+
+const (
+	STATE_LOOKING_FOR_SERVER = iota
+	STATE_WORLD_SELECT_SCREEN
+	STATE_LOGIN_SCREEN
+)

@@ -7,7 +7,7 @@ import (
 	"github.com/gabe-lee/OurSweeper/env_loader"
 	"github.com/gabe-lee/OurSweeper/internal/common"
 	_server "github.com/gabe-lee/OurSweeper/internal/server"
-	"github.com/gabe-lee/OurSweeper/internal/server_utility"
+	"github.com/gabe-lee/OurSweeper/internal/utility_package"
 	"github.com/gabe-lee/OurSweeper/logger"
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
@@ -19,12 +19,8 @@ type (
 )
 
 const (
-	DIFFICULTY_EASY = common.DIFFICULTY_EASY
-
 	uuidRandPool = true
-)
 
-const (
 	logDir    = "/logs"
 	masterDir = "Master"
 )
@@ -34,9 +30,10 @@ func main() {
 		uuid.EnableRandPool()
 	}
 	// shutdownSig, shutdown := context.WithCancel(context.Background())
+	utility := utility_package.NewServerUtility()
 	server := Server{
-		Logger: logger.NewLogger(logDir, masterDir, os.Stdout, 4),
-		Utils:  server_utility.NewServerUtility(),
+		Logger: logger.NewLogger(logDir, masterDir, os.Stdout, &utility),
+		Utils:  utility,
 	}
 	logWriter := server.Logger.NewLoggerWriter(logger.ERROR)
 	var env ServerAppEnv

@@ -9,11 +9,10 @@ import (
 	"github.com/gabe-lee/OurSweeper/env_loader"
 	"github.com/gabe-lee/OurSweeper/internal/database"
 	"github.com/gabe-lee/OurSweeper/internal/server_client_manager"
-	"github.com/gabe-lee/OurSweeper/internal/server_utility"
 	"github.com/gabe-lee/OurSweeper/internal/server_world_manager"
 	"github.com/gabe-lee/OurSweeper/internal/user_token"
+	"github.com/gabe-lee/OurSweeper/internal/utility_package"
 	"github.com/gabe-lee/OurSweeper/logger"
-	"github.com/gabe-lee/OurSweeper/wire"
 )
 
 const (
@@ -26,14 +25,12 @@ type (
 	SubLoggerWriter = logger.SubLoggerWriter
 	SweepDB         = database.SweepDB
 	AnonToken       = user_token.UserStats
-	AnonTokenRaw    = user_token.AnonTokenRaw
 	ServeMux        = http.ServeMux
 	ClientManager   = server_client_manager.ClientManager
-	ServerUtility   = server_utility.ServerUtility
+	ServerUtility   = utility_package.UtilityPackage
 	WorldManager    = server_world_manager.WorldManager
 )
 
-var bin = wire.LE
 
 type WebNetwork struct {
 	web_server    http.Server

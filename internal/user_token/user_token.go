@@ -1,12 +1,10 @@
 package user_token
 
 import (
-	"encoding/base64"
-	"io"
 	"time"
 
+	"github.com/gabe-lee/OurSweeper/data_buffer"
 	"github.com/gabe-lee/OurSweeper/utils"
-	"github.com/gabe-lee/OurSweeper/wire"
 	"github.com/google/uuid"
 )
 
@@ -41,78 +39,73 @@ type UserStats struct {
 	ScreenName    [16]byte
 }
 
-// WireSize implements wire.WireSizer.
-func (a *UserStats) WireSize() int {
+func (a *UserStats) ReadFromBuffer(buf *data_buffer.ReadBuffer) error {
+	e := utils.FirstError{}
+	e.Add(buf.U16_LE(&a.Version))
+	// Do something different on ver mismatch
+	e.Add(buf.U8_Slice(a.UUID[:]))
+	e.Add(buf.I64_LE(&a.Playtime))
+	e.Add(buf.U32_LE(&a.TotalScore))
+	e.Add(buf.U32_LE(&a.ScoreSweeps))
+	e.Add(buf.U32_LE(&a.ScoreFlags))
+	e.Add(buf.U32_LE(&a.Sweeps))
+	e.Add(buf.U32_LE(&a.TotalFlags))
+	e.Add(buf.U32_LE(&a.GoodFlags))
+	e.Add(buf.U32_LE(&a.Deaths))
+	e.Add(buf.U8(&a.ScreenNameLen))
+	e.Add(buf.U8_Slice(a.ScreenName[:a.ScreenNameLen]))
+	return e.Err
+}
+
+func (a *UserStats) WriteToBuffer(buf *data_buffer.WriteBuffer) {
+	buf.U16_LE(a.Version)
+	// Do something different on ver mismatch
+	buf.U8_Slice(a.UUID[:])
+	buf.I64_LE(a.Playtime)
+	buf.U32_LE(a.TotalScore)
+	buf.U32_LE(a.ScoreSweeps)
+	buf.U32_LE(a.ScoreFlags)
+	buf.U32_LE(a.Sweeps)
+	buf.U32_LE(a.TotalFlags)
+	buf.U32_LE(a.GoodFlags)
+	buf.U32_LE(a.Deaths)
+	buf.U8(a.ScreenNameLen)
+	buf.U8_Slice(a.ScreenName[:a.ScreenNameLen])
+}
+
+func (a *UserStats) SizeOnBuffer() int {
 	return 56 + int(a.ScreenNameLen)
 }
 
-// WireRead implements wire.WireReader.
-func (a *UserStats) WireRead(wire *wire.Incoming) {
-	wire.U16(&a.Version)
-	// Do something different on ver mismatch
-	wire.U8_Slice(a.UUID[:])
-	wire.I64(&a.Playtime)
-	wire.U32(&a.TotalScore)
-	wire.U32(&a.ScoreSweeps)
-	wire.U32(&a.ScoreFlags)
-	wire.U32(&a.Sweeps)
-	wire.U32(&a.TotalFlags)
-	wire.U32(&a.GoodFlags)
-	wire.U32(&a.Deaths)
-	wire.U8(&a.ScreenNameLen)
-	dst := a.ScreenName[:a.ScreenNameLen]
-	wire.U8_Slice(dst)
-}
+var _ data_buffer.SizeReadWritable = (*UserStats)(nil)
 
-// WireWrite implements wire.WireWriter.
-func (a *UserStats) WireWrite(wire *wire.Outgoing) {
-	wire.U16(a.Version)
-	// Do something different on ver mismatch
-	wire.U8_Slice(a.UUID[:])
-	wire.I64(a.Playtime)
-	wire.U32(a.TotalScore)
-	wire.U32(a.ScoreSweeps)
-	wire.U32(a.ScoreFlags)
-	wire.U32(a.Sweeps)
-	wire.U32(a.TotalFlags)
-	wire.U32(a.GoodFlags)
-	wire.U32(a.Deaths)
-	wire.U8(a.ScreenNameLen)
-	src := a.ScreenName[:a.ScreenNameLen]
-	wire.U8_Slice(src)
-}
+// type AnonTokenRaw struct {
+// 	Token []byte
+// }
 
-var _ wire.WireWriter = (*UserStats)(nil)
-var _ wire.WireReader = (*UserStats)(nil)
-var _ wire.WireSizer = (*UserStats)(nil)
+// // WireRead implements wire.WireReader.
+// func (a *AnonTokenRaw) WireRead(wire *wire.Incoming) {
+// 	var l uint32
+// 	wire.UVar32(&l)
+// 	a.Token = make([]byte, 0, l)
+// 	wire.U8_Slice(a.Token)
+// }
 
-type AnonTokenRaw struct {
-	Token []byte
-}
+// // WireWrite implements wire.WireWriter.
+// func (a *AnonTokenRaw) WireWrite(wire *wire.Outgoing) {
+// 	wire.UVar32(uint32(len(a.Token)))
+// 	wire.U8_Slice(a.Token)
+// }
 
-// WireRead implements wire.WireReader.
-func (a *AnonTokenRaw) WireRead(wire *wire.Incoming) {
-	var l uint32
-	wire.UVar32(&l)
-	a.Token = make([]byte, 0, l)
-	wire.U8_Slice(a.Token)
-}
+// var _ wire.WireWriter = (*AnonTokenRaw)(nil)
+// var _ wire.WireReader = (*AnonTokenRaw)(nil)
 
-// WireWrite implements wire.WireWriter.
-func (a *AnonTokenRaw) WireWrite(wire *wire.Outgoing) {
-	wire.UVar32(uint32(len(a.Token)))
-	wire.U8_Slice(a.Token)
-}
+// var encoding = base64.RawURLEncoding
 
-var _ wire.WireWriter = (*AnonTokenRaw)(nil)
-var _ wire.WireReader = (*AnonTokenRaw)(nil)
+// func RawTokenEncoder(writer io.Writer) io.WriteCloser {
+// 	return base64.NewEncoder(encoding, writer)
+// }
 
-var encoding = base64.RawURLEncoding
-
-func RawTokenEncoder(writer io.Writer) io.WriteCloser {
-	return base64.NewEncoder(encoding, writer)
-}
-
-func RawTokenDecoder(reader io.Reader) io.Reader {
-	return base64.NewDecoder(encoding, reader)
-}
+// func RawTokenDecoder(reader io.Reader) io.Reader {
+// 	return base64.NewDecoder(encoding, reader)
+// }

@@ -6,126 +6,66 @@ import (
 	"hash"
 
 	"github.com/gabe-lee/OurSweeper/data_buffer"
-	"github.com/gabe-lee/OurSweeper/wire"
 )
 
 const HMAC_LEN = sha256.Size
 const MIN_TOKEN_LEN = HMAC_LEN + 1
 
 var HASHER = sha256.New
-var BYTE_ORDER = wire.LE
 
 type (
-	WireWriter      = wire.WireWriter
-	WireSizeWriter  = wire.WireSizeWriter
-	WireReader      = wire.WireReader
-	WireSizeReader  = wire.WireSizeReader
-	IncomingWire    = wire.Incoming
-	OutgoingWire    = wire.Outgoing
 	WriteBuffer     = data_buffer.WriteBuffer
 	WriteBufferPool = data_buffer.WriteBufferPool
 	ReadBuffer      = data_buffer.ReadBuffer
+	Readable        = data_buffer.Readable
+	Writable        = data_buffer.Writable
+	Sizable         = data_buffer.Sizable
+	SizeWritable    = data_buffer.SizeWritable
 	Hash            = hash.Hash
 )
 
-// type tokenWriter struct {
-// 	buf  WriteBuffer
-// 	err  error
-// 	hash Hash
-// }
-
-// func newWriter(secret []byte, payloadSize int) tokenWriter {
-// 	t := tokenWriter{
-// 		buf:  data_buffer.NewWriteBuffer(payloadSize + HMAC_LEN),
-// 		hash: hmac.New(HASHER, secret),
-// 	}
-// 	return t
-// }
-
-// func (t *tokenWriter) Write(p []byte) (n int, err error) {
-// 	n, _ = t.buf.Write(p)
-// 	_, err = t.hash.Write(p)
-// 	if t.err == nil {
-// 		t.err = err
-// 	}
-// 	return
-// }
-
-// func (t *tokenWriter) WriteNoHash(p []byte) {
-// 	t.buf.Write(p)
-// }
-
-// type tokenValidReader struct {
-// 	buf  ReadBuffer
-// 	err  error
-// 	hash Hash
-// }
-
-// func newValidReader(secret []byte, data []byte) tokenValidReader {
-// 	t := tokenValidReader{
-// 		buf:  data_buffer.NewReadBuffer(data),
-// 		hash: hmac.New(HASHER, secret),
-// 	}
-// 	return t
-// }
-
-// func (t *tokenValidReader) Read(p []byte) (n int, err error) {
-// 	n, err = t.buf.Read(p)
-// 	if t.err == nil {
-// 		t.err = err
-// 	}
-// 	_, err = t.hash.Write(p)
-// 	if t.err == nil {
-// 		t.err = err
-// 	}
-// 	return
-// }
-
-// var _ io.Reader = (*tokenValidReader)(nil)
-
-// type tokenReader struct {
-// 	buf ReadBuffer
-// 	err error
-// }
-
-// func newReader(data []byte) tokenReader {
-// 	t := tokenReader{
-// 		buf: data_buffer.NewReadBuffer(data),
-// 	}
-// 	return t
-// }
-
-// func (t *tokenReader) Read(p []byte) (n int, err error) {
-// 	n, err = t.buf.Read(p)
-// 	if t.err == nil {
-// 		t.err = err
-// 	}
-// 	return
-// }
-
-// var _ io.Reader = (*tokenReader)(nil)
-
-func Create(secret []byte, inputPayload WireSizeWriter, outputBuffer *WriteBuffer) error {
-	size := inputPayload.WireSize()
-	fullSize := size + HMAC_LEN
-	write := wire.NewOutgoingAdv(outputBuffer, BYTE_ORDER, hmac.New(HASHER, secret), nil, fullSize)
-	write.Struct(inputPayload)
-	write.OwnHash()
-	return write.Err
+func Create(secret []byte, inputPayload Writable, outputBuffer *WriteBuffer) []byte {
+	start := outputBuffer.Len()
+	outputBuffer.Writable(inputPayload)
+	end := outputBuffer.Len()
+	written := outputBuffer.BytesRef()[start:end]
+	HMAC := hmac.New(HASHER, secret)
+	HMAC.Write(written)
+	outputBuffer.Hash(HMAC)
+	end = outputBuffer.Len()
+	return outputBuffer.BytesRef()[start:end]
 }
 
-func OpenAndValidate(secret []byte, inputBuffer *ReadBuffer, outputPayload WireReader) (valid bool, err error) {
-	read := wire.NewIncomingAdv(inputBuffer, BYTE_ORDER, hmac.New(HASHER, secret), nil, inputBuffer.Len())
-	read.Struct(outputPayload)
-	sentHMAC := inputBuffer.BytesRef()[:HMAC_LEN]
+func OpenAndValidate(secret []byte, inputBuffer *ReadBuffer, outputPayload Readable) (valid bool, err error) {
+	start := inputBuffer.Pos()
+	err = inputBuffer.Readable(outputPayload)
+	if err != nil {
+		return false, err
+	}
+	end := inputBuffer.Pos()
+	sentHMAC, err := inputBuffer.Discard(HMAC_LEN)
+	if err != nil {
+		return false, err
+	}
+	HMAC := hmac.New(HASHER, secret)
+	_, err = HMAC.Write(inputBuffer.BytesRef()[start:end])
+	if err != nil {
+		return false, err
+	}
 	expectedHMAC := make([]byte, 0, HMAC_LEN)
-	expectedHMAC = read.Hasher.Sum(expectedHMAC)
+	expectedHMAC = HMAC.Sum(expectedHMAC)
 	valid = hmac.Equal(expectedHMAC, sentHMAC)
-	return valid, read.Err
+	return valid, nil
 }
 
-func Open(inputBuffer *ReadBuffer, outputPayload WireReader) error {
-	read := wire.NewIncomingAdv(inputBuffer, BYTE_ORDER, nil, nil, inputBuffer.Len())
-	read.Struct(outputPayload)
-	return read.Err
+func Open(inputBuffer *ReadBuffer, outputPayload Readable) (tokenData, sentHMAC []byte, err error) {
+	start := inputBuffer.Pos()
+	err = inputBuffer.Readable(outputPayload)
+	if err != nil {
+		return nil, nil, err
+	}
+	end := inputBuffer.Pos()
+	tokenData = inputBuffer.BytesRef()[start:end]
+	sentHMAC, err = inputBuffer.Discard(HMAC_LEN)
+	return
 }
