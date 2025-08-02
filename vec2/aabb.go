@@ -1,13 +1,13 @@
 package vec2
 
-type AABB[T number] struct {
+type AABB[T Param] struct {
 	XMin T
 	YMin T
 	XMax T
 	YMax T
 }
 
-func AABB_FromPosSize[T number](pos Vec2[T], size Vec2[T]) AABB[T] {
+func AABB_FromPosSize[T Param](pos Vec2[T], size Vec2[T]) AABB[T] {
 	return AABB[T]{
 		XMin: pos.X,
 		YMin: pos.Y,

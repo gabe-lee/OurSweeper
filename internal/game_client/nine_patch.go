@@ -29,8 +29,8 @@ type NinePatchPanel struct {
 	SrcIdx     NP_IDX
 	TopLeft    Vec2_Int
 	Size       Vec2_Int
-	Parent     UI_IDX
-	Children   []UI_IDX
+	Parent     UI_Idx
+	Children   []UI_Idx
 	FnOnClick  func()
 	FnOnHover  func()
 	FnOnLayout func()

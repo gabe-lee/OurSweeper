@@ -2,18 +2,18 @@ package vec2
 
 import "fmt"
 
-type number interface {
+type Param interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
 		~float32 | ~float64
 }
 
-type Vec2[T number] struct {
+type Vec2[T Param] struct {
 	X T
 	Y T
 }
 
-func New[T number](x, y T) Vec2[T] {
+func New[T Param](x, y T) Vec2[T] {
 	return Vec2[T]{
 		X: x,
 		Y: y,
