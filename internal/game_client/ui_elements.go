@@ -1,7 +1,7 @@
 package game_client
 
 import (
-	ui "github.com/gabe-lee/OurSweeper/snaplay"
+	
 	"github.com/gabe-lee/OurSweeper/vec2"
 )
 

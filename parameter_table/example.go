@@ -138,7 +138,7 @@ package parameter_table
 	 func InitMyParamTable() {
 	 	MyParamTable.Set_U64(FIRST_ROOT_U64_PARAM, 600) // a radius
 		MyParamTable.Set_F32(FIRST_ROOT_F32_PARAM, 3.1415) // pi
-		MyParamTable.InitDerived_I32(FIRST_DERIVED_I32_PARAM, []uint16{FIRST_ROOT_U64_PARAM, FIRST_ROOT_F32_PARAM}, func(table *ParamTable) int32 {
+		MyParamTable.InitDerived_I32(FIRST_DERIVED_I32_PARAM, []uint16{FIRST_ROOT_U64_PARAM, FIRST_ROOT_F32_PARAM}, func(table *ParamTable, oldVal int32) int32 {
 			// Area of a circle with radius 600, as an integer
 			radius := table.Get_U64(FIRST_ROOT_U64_PARAM)
 			pi := table.Get_F32(FIRST_ROOT_F32_PARAM)
