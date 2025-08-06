@@ -93,70 +93,104 @@ func TestParamTable(t *testing.T) {
 	)
 
 	const (
-		_INPUT_AREA_OF_RECTANGLE_WIDTH uint16 = iota
-		_INPUT_AREA_OF_RECTANGLE_HEIGHT
+		_IN_AREA_OF_RECTANGLE_WIDTH uint16 = iota
+		_IN_AREA_OF_RECTANGLE_HEIGHT
+	)
+	const (
+		_OUT_AREA_OF_RECTANGLE_AREA uint16 = iota
 	)
 
-	var _AREA_OF_RECTANGLE_1 = [...]uint16{
-		_INPUT_AREA_OF_RECTANGLE_WIDTH:  uint16(RECT_WIDTH_1),
-		_INPUT_AREA_OF_RECTANGLE_HEIGHT: uint16(RECT_HEIGHT_1),
+	var _INS_AREA_OF_RECTANGLE_1 = [...]uint16{
+		_IN_AREA_OF_RECTANGLE_WIDTH:  uint16(RECT_WIDTH_1),
+		_IN_AREA_OF_RECTANGLE_HEIGHT: uint16(RECT_HEIGHT_1),
+	}
+	var _OUTS_AREA_OF_RECTANGLE_1 = [...]uint16{
+		_OUT_AREA_OF_RECTANGLE_AREA: uint16(RECT_AREA_1),
+	}
+	var _OUTS_AREA_OF_RECTANGLE_1_DUPE = [...]uint16{
+		_OUT_AREA_OF_RECTANGLE_AREA: uint16(RECT_AREA_DUPLICATE_1),
 	}
 
-	var _AREA_OF_RECTANGLE_2 = [...]uint16{
-		_INPUT_AREA_OF_RECTANGLE_WIDTH:  uint16(RECT_WIDTH_2),
-		_INPUT_AREA_OF_RECTANGLE_HEIGHT: uint16(RECT_HEIGHT_2),
+	var _INS_AREA_OF_RECTANGLE_2 = [...]uint16{
+		_IN_AREA_OF_RECTANGLE_WIDTH:  uint16(RECT_WIDTH_2),
+		_IN_AREA_OF_RECTANGLE_HEIGHT: uint16(RECT_HEIGHT_2),
+	}
+	var _OUTS_AREA_OF_RECTANGLE_2 = [...]uint16{
+		_OUT_AREA_OF_RECTANGLE_AREA: uint16(RECT_AREA_2),
 	}
 
-	var _AREA_OF_RECTANGLE_CYCLIC = [...]uint16{
-		_INPUT_AREA_OF_RECTANGLE_WIDTH:  uint16(RECT_AREA_CYCLIC),
-		_INPUT_AREA_OF_RECTANGLE_HEIGHT: uint16(RECT_HEIGHT_2),
+	var _INS_AREA_OF_RECTANGLE_CYCLIC = [...]uint16{
+		_IN_AREA_OF_RECTANGLE_WIDTH:  uint16(RECT_AREA_CYCLIC),
+		_IN_AREA_OF_RECTANGLE_HEIGHT: uint16(RECT_HEIGHT_2),
+	}
+	var _OUTS_AREA_OF_RECTANGLE_CYCLIC = [...]uint16{
+		_OUT_AREA_OF_RECTANGLE_AREA: uint16(RECT_AREA_CYCLIC),
 	}
 
 	const (
-		_INPUT_VOLUME_OF_RECTANGLE_AREA uint16 = iota
-		_INPUT_VOLUME_OF_RECTANGLE_DEPTH
+		_IN_VOLUME_OF_RECTANGLE_AREA uint16 = iota
+		_IN_VOLUME_OF_RECTANGLE_DEPTH
 	)
 
-	var _VOLUME_OF_RECTANGLE_1 = [...]uint16{
-		_INPUT_VOLUME_OF_RECTANGLE_AREA:  uint16(RECT_AREA_1),
-		_INPUT_VOLUME_OF_RECTANGLE_DEPTH: uint16(RECT_DEPTH_1),
+	const (
+		_OUT_VOLUME_OF_RECTANGLE_VOLUME uint16 = iota
+	)
+
+	var _INS_VOLUME_OF_RECTANGLE_1 = [...]uint16{
+		_IN_VOLUME_OF_RECTANGLE_AREA:  uint16(RECT_AREA_1),
+		_IN_VOLUME_OF_RECTANGLE_DEPTH: uint16(RECT_DEPTH_1),
+	}
+	var _OUTS_VOLUME_OF_RECTANGLE_1 = [...]uint16{
+		_OUT_VOLUME_OF_RECTANGLE_VOLUME: uint16(RECT_VOLUME_1),
 	}
 
-	var _VOLUME_OF_RECTANGLE_2 = [...]uint16{
-		_INPUT_VOLUME_OF_RECTANGLE_AREA:  uint16(RECT_AREA_2),
-		_INPUT_VOLUME_OF_RECTANGLE_DEPTH: uint16(RECT_DEPTH_2),
+	var _INS_VOLUME_OF_RECTANGLE_2 = [...]uint16{
+		_IN_VOLUME_OF_RECTANGLE_AREA:  uint16(RECT_AREA_2),
+		_IN_VOLUME_OF_RECTANGLE_DEPTH: uint16(RECT_DEPTH_2),
+	}
+	var _OUTS_VOLUME_OF_RECTANGLE_2 = [...]uint16{
+		_OUT_VOLUME_OF_RECTANGLE_VOLUME: uint16(RECT_VOLUME_2),
 	}
 
 	const (
-		_INPUT_SUM_OF_RECT_VOLUME_1 uint16 = iota
-		_INPUT_SUM_OF_RECT_VOLUME_2
+		_IN_SUM_OF_RECT_VOLUME_1 uint16 = iota
+		_IN_SUM_OF_RECT_VOLUME_2
 	)
 
-	var _SUM_OF_RECT_VOLUMES_1_2 = [...]uint16{
-		_INPUT_SUM_OF_RECT_VOLUME_1: uint16(RECT_VOLUME_1),
-		_INPUT_SUM_OF_RECT_VOLUME_2: uint16(RECT_VOLUME_2),
+	const (
+		_OUT_SUM_OF_RECT_VOLUME_SUM uint16 = iota
+	)
+
+	var _INS_SUM_OF_RECT_VOLUMES_1_2 = [...]uint16{
+		_IN_SUM_OF_RECT_VOLUME_1: uint16(RECT_VOLUME_1),
+		_IN_SUM_OF_RECT_VOLUME_2: uint16(RECT_VOLUME_2),
 	}
+	var _OUTS_SUM_OF_RECT_VOLUMES_1_2 = [...]uint16{
+		_OUT_SUM_OF_RECT_VOLUME_SUM: uint16(RECT_SUM_VOLUME),
+	}
+
+	var tooLongHookup [277]uint16
 
 	var MyParamTable = NewParamTable(_U64_PARAMS_END, _I64_PARAMS_END, _F64_PARAMS_END, _U32_PARAMS_END, _I32_PARAMS_END, _F32_PARAMS_END, _U16_PARAMS_END, _I16_PARAMS_END, _U8_PARAMS_END, _I8_PARAMS_END, _BOOL_PARAMS_END, _CALC_COUNT)
 	var InitMyParamTable func() = func() {
 		// Register all calculations first
 		MyParamTable.RegisterCalc(_CALC_AREA_OF_RECTANGLE, func(t *CalcInterface) {
-			width := t.GetInput_U64(_INPUT_AREA_OF_RECTANGLE_WIDTH)   // first input
-			height := t.GetInput_U64(_INPUT_AREA_OF_RECTANGLE_HEIGHT) // second input
+			width := t.GetInput_U64(_IN_AREA_OF_RECTANGLE_WIDTH)   // first input
+			height := t.GetInput_U64(_IN_AREA_OF_RECTANGLE_HEIGHT) // second input
 			area := width * height
-			t.SetOutput_U64(area)
+			t.SetOutput_U64(_OUT_AREA_OF_RECTANGLE_AREA, area)
 		})
 		MyParamTable.RegisterCalc(_CALC_VOLUME_OF_RECTANGLE, func(t *CalcInterface) {
-			area := t.GetInput_U64(_INPUT_VOLUME_OF_RECTANGLE_AREA)   // first input
-			depth := t.GetInput_U32(_INPUT_VOLUME_OF_RECTANGLE_DEPTH) // second input
+			area := t.GetInput_U64(_IN_VOLUME_OF_RECTANGLE_AREA)   // first input
+			depth := t.GetInput_U32(_IN_VOLUME_OF_RECTANGLE_DEPTH) // second input
 			volume := area * uint64(depth)
-			t.SetOutput_U64(volume)
+			t.SetOutput_U64(_OUT_VOLUME_OF_RECTANGLE_VOLUME, volume)
 		})
 		MyParamTable.RegisterCalc(_CALC_SUM_OF_VOLUME_OF_RECTS, func(t *CalcInterface) {
-			vol1 := t.GetInput_U64(_INPUT_SUM_OF_RECT_VOLUME_1) // first input
-			vol2 := t.GetInput_U64(_INPUT_SUM_OF_RECT_VOLUME_2) // second input
+			vol1 := t.GetInput_U64(_IN_SUM_OF_RECT_VOLUME_1) // first input
+			vol2 := t.GetInput_U64(_IN_SUM_OF_RECT_VOLUME_2) // second input
 			sumVol := vol1 + vol2
-			t.SetOutput_U64(sumVol)
+			t.SetOutput_U64(_OUT_SUM_OF_RECT_VOLUME_SUM, sumVol)
 		})
 		// Init root values
 		MyParamTable.SetRoot_U64(RECT_WIDTH_1, 600)  // width
@@ -164,12 +198,12 @@ func TestParamTable(t *testing.T) {
 		MyParamTable.SetRoot_U64(RECT_WIDTH_2, 42)   // width
 		MyParamTable.SetRoot_U64(RECT_HEIGHT_2, 99)  // height
 		// Init derived values
-		MyParamTable.InitDerived_U64(RECT_AREA_1, _CALC_AREA_OF_RECTANGLE, _AREA_OF_RECTANGLE_1[:])
-		MyParamTable.InitDerived_U64(RECT_VOLUME_1, _CALC_VOLUME_OF_RECTANGLE, _VOLUME_OF_RECTANGLE_1[:])
-		MyParamTable.InitDerived_U64(RECT_AREA_2, _CALC_AREA_OF_RECTANGLE, _AREA_OF_RECTANGLE_2[:])
-		MyParamTable.InitDerived_U64(RECT_VOLUME_2, _CALC_VOLUME_OF_RECTANGLE, _VOLUME_OF_RECTANGLE_2[:])
-		MyParamTable.InitDerived_U64(RECT_SUM_VOLUME, _CALC_SUM_OF_VOLUME_OF_RECTS, _SUM_OF_RECT_VOLUMES_1_2[:])
-		MyParamTable.InitDerived_U64(RECT_AREA_DUPLICATE_1, _CALC_AREA_OF_RECTANGLE, _AREA_OF_RECTANGLE_1[:])
+		MyParamTable.InitDerived_U64(RECT_AREA_1, _CALC_AREA_OF_RECTANGLE, _INS_AREA_OF_RECTANGLE_1[:], _OUTS_AREA_OF_RECTANGLE_1[:])
+		MyParamTable.InitDerived_U64(RECT_VOLUME_1, _CALC_VOLUME_OF_RECTANGLE, _INS_VOLUME_OF_RECTANGLE_1[:], _OUTS_VOLUME_OF_RECTANGLE_1[:])
+		MyParamTable.InitDerived_U64(RECT_AREA_2, _CALC_AREA_OF_RECTANGLE, _INS_AREA_OF_RECTANGLE_2[:], _OUTS_AREA_OF_RECTANGLE_2[:])
+		MyParamTable.InitDerived_U64(RECT_VOLUME_2, _CALC_VOLUME_OF_RECTANGLE, _INS_VOLUME_OF_RECTANGLE_2[:], _OUTS_VOLUME_OF_RECTANGLE_2[:])
+		MyParamTable.InitDerived_U64(RECT_SUM_VOLUME, _CALC_SUM_OF_VOLUME_OF_RECTS, _INS_SUM_OF_RECT_VOLUMES_1_2[:], _OUTS_SUM_OF_RECT_VOLUMES_1_2[:])
+		MyParamTable.InitDerived_U64(RECT_AREA_DUPLICATE_1, _CALC_AREA_OF_RECTANGLE, _INS_AREA_OF_RECTANGLE_1[:], _OUTS_AREA_OF_RECTANGLE_1_DUPE[:])
 	}
 	InitMyParamTable()
 	var expectRoot_U64 = func(idx PIdx_U64, val uint64) {
@@ -293,9 +327,7 @@ func TestParamTable(t *testing.T) {
 				t.Errorf("re-registering already registered calc did not cause panic with EnableDebug == true")
 			}
 		}()
-		MyParamTable.RegisterCalc(_CALC_AREA_OF_RECTANGLE, func(t *CalcInterface) {
-			t.SetOutput_U64(0)
-		})
+		MyParamTable.RegisterCalc(_CALC_AREA_OF_RECTANGLE, func(t *CalcInterface) {})
 	}()
 	func() {
 		defer func() {
@@ -303,7 +335,7 @@ func TestParamTable(t *testing.T) {
 				t.Errorf("causing derived cyclic loop did not cause panic with EnableDebug == true")
 			}
 		}()
-		MyParamTable.InitDerived_U64(RECT_AREA_CYCLIC, _CALC_AREA_OF_RECTANGLE, _AREA_OF_RECTANGLE_CYCLIC[:])
+		MyParamTable.InitDerived_U64(RECT_AREA_CYCLIC, _CALC_AREA_OF_RECTANGLE, _INS_AREA_OF_RECTANGLE_CYCLIC[:], _OUTS_AREA_OF_RECTANGLE_CYCLIC[:])
 	}()
 	func() {
 		defer func() {
@@ -312,6 +344,22 @@ func TestParamTable(t *testing.T) {
 			}
 		}()
 		var _ = NewParamTable(PIdx_U64(_U32_PARAMS_END), _I64_PARAMS_END, _F64_PARAMS_END, PIdx_U32(_U64_PARAMS_END), _I32_PARAMS_END, _F32_PARAMS_END, _U16_PARAMS_END, _I16_PARAMS_END, _U8_PARAMS_END, _I8_PARAMS_END, _BOOL_PARAMS_END, _CALC_COUNT)
+	}()
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("overlong parent length did not cause panic with EnableDebug == true")
+			}
+		}()
+		MyParamTable.InitDerived_F64(FIRST_F64_PARAM, _CALC_AREA_OF_RECTANGLE, tooLongHookup[:], _OUTS_AREA_OF_RECTANGLE_CYCLIC[:])
+	}()
+	func() {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("overlong outputs length did not cause panic with EnableDebug == true")
+			}
+		}()
+		MyParamTable.InitDerived_I8(FIRST_I8_PARAM, _CALC_AREA_OF_RECTANGLE, _INS_AREA_OF_RECTANGLE_CYCLIC[:], tooLongHookup[:])
 	}()
 }
 
@@ -401,20 +449,27 @@ func TestParamTable(t *testing.T) {
 	 )
 
 	 const (
-		_CALC_INVALID PIdx_Calc = PIdx_Calc(iota) // recommended to leave idx 0 as a nil func for debug purposes
-		_FIRST_CALC
+		_FIRST_CALC = PIdx_Calc(iota)
 		// ... more calculation indexes
 		_CALC_COUNT
 	 )
 
 	 const (
-		_INPUT_FIRST_CALC_1 uint16 = iota
-		_INPUT_FIRST_CALC_2
+		_IN_FIRST_CALC_1 uint16 = iota
+		_IN_FIRST_CALC_2
 	 )
 
-	 var _FIRST_CALC_1 = [...]uint16{
-		_INPUT_FIRST_CALC_1:  uint16(FIRST_U64_PARAM),
-		_INPUT_FIRST_CALC_2: uint16(FIRST_I64_PARAM),
+	 const (
+		_OUT_FIRST_CALC uint16 = iota
+	 )
+
+	 var _INS_FIRST_CALC_1 = [...]uint16{
+		_IN_FIRST_CALC_1:  uint16(FIRST_U64_PARAM),
+		_IN_FIRST_CALC_2: uint16(FIRST_I64_PARAM),
+	 }
+
+	 var _OUTS_FIRST_CALC_1 = [...]uint16{
+		_OUT_FIRST_CALC:  uint16(FIRST_I32_PARAM),
 	 }
 
 	 var MyParamTable = paratable.NewParamTable(_U64_PARAMS_END, _I64_PARAMS_END, _F64_PARAMS_END, _U32_PARAMS_END, _I32_PARAMS_END, _F32_PARAMS_END, _U16_PARAMS_END, _I16_PARAMS_END, _U8_PARAMS_END, _I8_PARAMS_END, _BOOL_PARAMS_END, _CALC_COUNT)
@@ -425,13 +480,13 @@ func TestParamTable(t *testing.T) {
 			val1 := t.GetInput_U64(_INPUT_FIRST_CALC_1) // first input
 			val2 := t.GetInput_I64(_INPUT_FIRST_CALC_2) // second input
 			val3 := int32(val1) + int32(val2)
-			t.SetOutput_I32(val3)
+			t.SetOutput_I32(_OUT_FIRST_CALC, val3)
 		})
 		// Init root values
 		MyParamTable.SetRoot_U64(FIRST_U64_PARAM, 1)
 		MyParamTable.SetRoot_I64(FIRST_I64_PARAM, -2)
 		// Init derived values
-		MyParamTable.InitDerived_I32(FIRST_I32_PARAM, _FIRST_CALC, _FIRST_CALC_1[:])
+		MyParamTable.InitDerived_I32(FIRST_I32_PARAM, _FIRST_CALC, _INS_FIRST_CALC_1[:], _OUTS_FIRST_CALC_1[:])
 	 }
 */
 var PARAM_TABLE_TEMPLATE_DOC_COMMENT struct{}

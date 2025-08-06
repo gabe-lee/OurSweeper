@@ -23,39 +23,35 @@ type (
 )
 
 const (
-	FIRST_U64_PARAM PIdx_U64 = PIdx_U64(iota)
+	_U64_PARAMS_END PIdx_U64 = PIdx_U64(iota)
 	// ... more uint64 param indexes
-	_U64_PARAMS_END
 )
 
 const (
-	FIRST_I64_PARAM PIdx_I64 = PIdx_I64(iota + _U64_PARAMS_END)
+	_I64_PARAMS_END PIdx_I64 = PIdx_I64(iota + _U64_PARAMS_END)
 	// ... more uint64 param indexes
-	_I64_PARAMS_END
 )
 
 const (
-	FIRST_F64_PARAM PIdx_F64 = PIdx_F64(iota + _I64_PARAMS_END)
+	_F64_PARAMS_END PIdx_F64 = PIdx_F64(iota + _I64_PARAMS_END)
 	// ... more float64 param indexes
-	_F64_PARAMS_END
 )
 
 const (
-	FIRST_U32_PARAM PIdx_U32 = PIdx_U32(iota + _F64_PARAMS_END)
+	_U32_PARAMS_END PIdx_U32 = PIdx_U32(iota + _F64_PARAMS_END)
 	// ... more uint32 param indexes
-	_U32_PARAMS_END
 )
 
 const (
-	FIRST_I32_PARAM PIdx_I32 = PIdx_I32(iota + _U32_PARAMS_END)
+	WINDOW_WIDTH PIdx_I32 = PIdx_I32(iota + _U32_PARAMS_END)
+	WINDOW_HEIGHT
 	// ... more int32 param indexes
 	_I32_PARAMS_END
 )
 
 const (
-	FIRST_F32_PARAM PIdx_F32 = PIdx_F32(iota + _I32_PARAMS_END)
+	_F32_PARAMS_END PIdx_F32 = PIdx_F32(iota + _I32_PARAMS_END)
 	// ... more float32 param indexes
-	_F32_PARAMS_END
 )
 
 const (
@@ -90,30 +86,46 @@ const (
 
 const (
 	_CALC_INVALID PIdx_Calc = PIdx_Calc(iota) // recommended to leave idx 0 as a nil func for debug purposes
-	_FIRST_CALC
+	_CALC_CENTER_OF_RECT
+	_CALC_CENTER_OF_WINDOW
+	_CALC_TEXT_SIZE
 	// ... more calculation indexes
 	_CALC_COUNT
 )
 
 const (
-	_INPUT_FIRST_CALC_1 uint16 = iota
-	_INPUT_FIRST_CALC_2
+	_INPUT_CENTER_OF_WINDOW_WIDTH uint16 = iota
+	_INPUT_CENTER_OF_WINDOW_HEIGHT
 )
 
-var _FIRST_CALC_1 = [...]uint16{
-	_INPUT_FIRST_CALC_1: uint16(FIRST_U64_PARAM),
-	_INPUT_FIRST_CALC_2: uint16(FIRST_I64_PARAM),
+const (
+	_INPUT_CENTER_OF_RECT_TOP_LEFT uint16 = iota
+	_INPUT_CENTER_OF_RECT_TOP_RIGHT
+	_INPUT_CENTER_OF_RECT_BOT_LEFT
+	_INPUT_CENTER_OF_RECT_BOT_RIGHT
+)
+
+var _CENTER_OF_WINDOW_INPUTS = [...]uint16{
+	_INPUT_CENTER_OF_WINDOW_WIDTH:  uint16(WINDOW_WIDTH),
+	_INPUT_CENTER_OF_WINDOW_HEIGHT: uint16(WINDOW_HEIGHT),
 }
+
+const (
+	_IN_TEXT_SIZE_SIZE uint16 = iota
+	_IN_TEXT_SIZE_LANG
+	_IN_TEXT_SIZE_STRING
+)
 
 var MyParamTable = paratable.NewParamTable(_U64_PARAMS_END, _I64_PARAMS_END, _F64_PARAMS_END, _U32_PARAMS_END, _I32_PARAMS_END, _F32_PARAMS_END, _U16_PARAMS_END, _I16_PARAMS_END, _U8_PARAMS_END, _I8_PARAMS_END, _BOOL_PARAMS_END, _CALC_COUNT)
 
 func InitMyParamTable() {
 	// Register all calculations first
-	MyParamTable.RegisterCalc(_FIRST_CALC, func(t *CalcInterface) {
-		val1 := t.GetInput_U64(_INPUT_FIRST_CALC_1) // first input
-		val2 := t.GetInput_I64(_INPUT_FIRST_CALC_2) // second input
-		val3 := int32(val1) + int32(val2)
-		t.SetOutput_I32(val3)
+	MyParamTable.RegisterCalc(_CALC_TEXT_SIZE, func(t *CalcInterface) {
+		size := t.GetInput_F32(_IN_TEXT_SIZE_SIZE)
+		lang := t.GetInput_U8(_IN_TEXT_SIZE_LANG)
+		textIdx := t.GetInput_U16(_IN_TEXT_SIZE_STRING)
+		w, h := GetUiTextSize(size, lang, textIdx)
+		t.SetOutput_F32(val3)
 	})
 	// Init root values
 	MyParamTable.SetRoot_U64(FIRST_U64_PARAM, 1)

@@ -14,7 +14,6 @@ import (
 	"github.com/gabe-lee/OurSweeper/internal/user_token"
 	MSG "github.com/gabe-lee/OurSweeper/internal/wire_codes"
 	"github.com/gabe-lee/OurSweeper/logger"
-	"github.com/gabe-lee/OurSweeper/scrap/wire"
 	"github.com/gabe-lee/OurSweeper/token"
 	"github.com/gabe-lee/OurSweeper/vec2"
 	"github.com/gabe-lee/OurSweeper/xmath"
@@ -160,21 +159,22 @@ func (g *GameClient) Update() error {
 		g.BoardX = xmath.Clamp(C.MIN_BOARD_POS_X, g.BoardX, C.MAX_BOARD_POS_X)
 		g.BoardY = xmath.Clamp(C.MIN_BOARD_POS_Y, g.BoardY, C.MAX_BOARD_POS_Y)
 		if g.Input.MouseLJustPressed {
-			tilePos := g.MousePosToTilePos()
-			tileIdx := tilePos.ToIndex(C.TY_SHIFT)
-			if g.World.Tiles[tileIdx] > 8 { //FIXME make `ClientTile` type with readable methods (cheking whether tile is not swept here)
+			//FIXME
+			// tilePos := g.MousePosToTilePos()
+			// tileIdx := tilePos.ToIndex(C.TY_SHIFT)
+			// if g.World.Tiles[tileIdx] > 8 { //FIXME make `ClientTile` type with readable methods (cheking whether tile is not swept here)
 
-				request := common.NewSweepRequest(tilePos)
-				buf := bytes.Buffer{}
-				buf.Grow(64)
-				outWire := wire.NewOutgoing(&buf, wire.LE) //FIXME
-				request.WireWrite(&outWire)                //FIXME
-				if outWire.HasErr() {
-					g.Log.Warn("failed to write SweepRequest message: %s", outWire.Err())
-				} else {
-					g.SendMessages <- buf.Bytes()
-				}
-			}
+			// 	request := common.NewSweepRequest(tilePos)
+			// 	buf := bytes.Buffer{}
+			// 	buf.Grow(64)
+			// 	outWire := wire.NewOutgoing(&buf, wire.LE) //FIXME
+			// 	request.WireWrite(&outWire)                //FIXME
+			// 	if outWire.HasErr() {
+			// 		g.Log.Warn("failed to write SweepRequest message: %s", outWire.Err())
+			// 	} else {
+			// 		g.SendMessages <- buf.Bytes()
+			// 	}
+			// }
 		}
 	}
 

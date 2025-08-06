@@ -1,123 +1,116 @@
 package game_client
 
-import (
-	"image"
+// type NinePatchSource struct {
+// 	TopLeft  Vec2_Int
+// 	BotRight Vec2_Int
+// 	Margin   Vec2_Int
+// }
 
-	C "github.com/gabe-lee/OurSweeper/internal/consts"
-	"github.com/hajimehoshi/ebiten/v2"
-)
+// type NP_IDX uint16
 
-type NinePatchSource struct {
-	TopLeft  Vec2_Int
-	BotRight Vec2_Int
-	Margin   Vec2_Int
-}
+// const (
+// 	NINE_P_DARK NP_IDX = iota
+// 	NINE_P_LIGHT
+// )
 
-type NP_IDX uint16
+// var NINE_SOURCE = [...]NinePatchSource{
+// 	NINE_P_DARK:  NinePatchSource{TopLeft: SPRITE[SPRITE_PANEL_DARK], BotRight: SPRITE[SPRITE_PANEL_DARK].Add(SPRITE_SIZE), Margin: SPRITE_PANEL_MARGIN},
+// 	NINE_P_LIGHT: NinePatchSource{TopLeft: SPRITE[SPRITE_PANEL_LIGHT], BotRight: SPRITE[SPRITE_PANEL_LIGHT].Add(SPRITE_SIZE), Margin: SPRITE_PANEL_MARGIN},
+// }
 
-const (
-	NINE_P_DARK NP_IDX = iota
-	NINE_P_LIGHT
-)
+// type NinePatchPanel struct {
+// 	SrcIdx     NP_IDX
+// 	TopLeft    Vec2_Int
+// 	Size       Vec2_Int
+// 	Parent     UI_Idx
+// 	Children   []UI_Idx
+// 	FnOnClick  func()
+// 	FnOnHover  func()
+// 	FnOnLayout func()
+// 	ZIndex     int
+// 	Active     bool
+// }
 
-var NINE_SOURCE = [...]NinePatchSource{
-	NINE_P_DARK:  NinePatchSource{TopLeft: SPRITE[SPRITE_PANEL_DARK], BotRight: SPRITE[SPRITE_PANEL_DARK].Add(SPRITE_SIZE), Margin: SPRITE_PANEL_MARGIN},
-	NINE_P_LIGHT: NinePatchSource{TopLeft: SPRITE[SPRITE_PANEL_LIGHT], BotRight: SPRITE[SPRITE_PANEL_LIGHT].Add(SPRITE_SIZE), Margin: SPRITE_PANEL_MARGIN},
-}
+// func (n *NinePatchPanel) GetChild(relativeIdx int) UI_Element {
+// 	return UI[n.Children[relativeIdx]]
+// }
 
-type NinePatchPanel struct {
-	SrcIdx     NP_IDX
-	TopLeft    Vec2_Int
-	Size       Vec2_Int
-	Parent     UI_Idx
-	Children   []UI_Idx
-	FnOnClick  func()
-	FnOnHover  func()
-	FnOnLayout func()
-	ZIndex     int
-	Active     bool
-}
+// // GetIndexInParent implements UI_Element.
+// func (n *NinePatchPanel) GetIndexInParent() int {
+// 	return int(n.OwnIdx)
+// }
 
-func (n *NinePatchPanel) GetChild(relativeIdx int) UI_Element {
-	return UI[n.Children[relativeIdx]]
-}
+// // GetParent implements UI_Element.
+// func (n *NinePatchPanel) GetParent() UI_Element {
+// 	panic("unimplemented")
+// }
 
-// GetIndexInParent implements UI_Element.
-func (n *NinePatchPanel) GetIndexInParent() int {
-	return int(n.OwnIdx)
-}
+// // IsActive implements UI_Element.
+// func (n *NinePatchPanel) IsActive() bool {
+// 	panic("unimplemented")
+// }
 
-// GetParent implements UI_Element.
-func (n *NinePatchPanel) GetParent() UI_Element {
-	panic("unimplemented")
-}
+// // OnScroll implements UI_Element.
+// func (n *NinePatchPanel) OnScroll(dx float64, dy float64) {
+// 	panic("unimplemented")
+// }
 
-// IsActive implements UI_Element.
-func (n *NinePatchPanel) IsActive() bool {
-	panic("unimplemented")
-}
+// // ReLayout implements UI_Element.
+// func (n *NinePatchPanel) ReLayout(depth int) {
+// 	panic("unimplemented")
+// }
 
-// OnScroll implements UI_Element.
-func (n *NinePatchPanel) OnScroll(dx float64, dy float64) {
-	panic("unimplemented")
-}
+// // SetActive implements UI_Element.
+// func (n *NinePatchPanel) SetActive(state bool) {
+// 	panic("unimplemented")
+// }
 
-// ReLayout implements UI_Element.
-func (n *NinePatchPanel) ReLayout(depth int) {
-	panic("unimplemented")
-}
+// // Draw implements UI_Element.
+// func (n *NinePatchPanel) Draw(atlas *EbitImage, screen *EbitImage) {
+// 	src := NINE_SOURCE[n.SrcIdx]
+// 	srcSize := src.BotRight.Sub(src.TopLeft)
+// 	srcRect := image.Rect(src.TopLeft.X, src.TopLeft.Y, src.TopLeft.X+C.TILE_SIZE, src.TopLeft.Y+C.TILE_SIZE)
+// 	op := &ebiten.DrawImageOptions{}
+// 	scale := n.Size.ToFloat64().Div(srcSize.ToFloat64())
+// 	op.GeoM.Scale(scale.X, scale.Y)
+// 	op.GeoM.Translate(float64(n.TopLeft.X), float64(n.TopLeft.Y))
+// 	screen.DrawImage(atlas.SubImage(srcRect).(*EbitImage), op)
+// 	for _, idx := range n.Children {
+// 		UI[idx].Draw(atlas, screen)
+// 	}
+// }
 
-// SetActive implements UI_Element.
-func (n *NinePatchPanel) SetActive(state bool) {
-	panic("unimplemented")
-}
+// // GetPos implements UI_Element.
+// func (n *NinePatchPanel) GetPos() Vec2_Int {
+// 	return n.TopLeft
+// }
 
-// Draw implements UI_Element.
-func (n *NinePatchPanel) Draw(atlas *EbitImage, screen *EbitImage) {
-	src := NINE_SOURCE[n.SrcIdx]
-	srcSize := src.BotRight.Sub(src.TopLeft)
-	srcRect := image.Rect(src.TopLeft.X, src.TopLeft.Y, src.TopLeft.X+C.TILE_SIZE, src.TopLeft.Y+C.TILE_SIZE)
-	op := &ebiten.DrawImageOptions{}
-	scale := n.Size.ToFloat64().Div(srcSize.ToFloat64())
-	op.GeoM.Scale(scale.X, scale.Y)
-	op.GeoM.Translate(float64(n.TopLeft.X), float64(n.TopLeft.Y))
-	screen.DrawImage(atlas.SubImage(srcRect).(*EbitImage), op)
-	for _, idx := range n.Children {
-		UI[idx].Draw(atlas, screen)
-	}
-}
+// // GetSize implements UI_Element.
+// func (n *NinePatchPanel) GetSize() Vec2_Int {
+// 	return n.Size
+// }
 
-// GetPos implements UI_Element.
-func (n *NinePatchPanel) GetPos() Vec2_Int {
-	return n.TopLeft
-}
+// // Layout implements UI_Element.
+// func (n *NinePatchPanel) Layout() {
+// 	if n.FnOnLayout != nil {
+// 		n.FnOnLayout()
+// 	}
+// }
 
-// GetSize implements UI_Element.
-func (n *NinePatchPanel) GetSize() Vec2_Int {
-	return n.Size
-}
+// // OnClick implements UI_Element.
+// func (n *NinePatchPanel) OnClick() {
+// 	if n.FnOnClick != nil {
+// 		n.FnOnClick()
+// 	} else {
+// 		UI[n.Parent].OnClick()
+// 	}
+// }
 
-// Layout implements UI_Element.
-func (n *NinePatchPanel) Layout() {
-	if n.FnOnLayout != nil {
-		n.FnOnLayout()
-	}
-}
+// // OnHover implements UI_Element.
+// func (n *NinePatchPanel) OnHover() {
+// 	if n.FnOnHover != nil {
+// 		n.FnOnHover()
+// 	}
+// }
 
-// OnClick implements UI_Element.
-func (n *NinePatchPanel) OnClick() {
-	if n.FnOnClick != nil {
-		n.FnOnClick()
-	} else {
-		UI[n.Parent].OnClick()
-	}
-}
-
-// OnHover implements UI_Element.
-func (n *NinePatchPanel) OnHover() {
-	if n.FnOnHover != nil {
-		n.FnOnHover()
-	}
-}
-
-var _ UI_Element = (*NinePatchPanel)(nil)
+// var _ UI_Element = (*NinePatchPanel)(nil)

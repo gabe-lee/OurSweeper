@@ -13,5 +13,5 @@ const (
 
 var PALETTE = [_colCount]Color{
 	COLOR_TEXT_PRIMARY: Color{R: 225, G: 225, B: 225, A: 255},
-	COLOR_TEXT_PRIMARY: Color{R: 225, G: 225, B: 225, A: 255},
+	// COLOR_TEXT_PRIMARY: Color{R: 225, G: 225, B: 225, A: 255},
 }

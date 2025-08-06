@@ -1,10 +1,17 @@
 package game_client
 
 import (
+	"bytes"
+	_ "embed"
+	"fmt"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"golang.org/x/text/language"
 )
+
+// go:embed space_grotesk.ttf
+var fontdata []byte
 
 const (
 	TEXT_LOGIN_ANON_BUTTON uint16 = iota
@@ -45,7 +52,7 @@ var LANG_STR_TABLE = map[string]uint32{
 }
 
 var AppLang uint32 = LANG_EN
-var AppFontFace text.Face
+var AppFontFace text.GoTextFace
 
 func GetLangIdx(langString string) uint32 {
 	idx, exists := LANG_STR_TABLE[langString]
@@ -63,18 +70,27 @@ func SetLangIdx(langString string) {
 	AppLang = GetLangIdx(langString)
 }
 
-func GetGuiText(textIdx uint32) string {
-	return TEXT[textIdx][AppLang]
+func GetGuiText(textIdx uint16, lang uint8) string {
+	return TEXT[textIdx][lang]
 }
 
-func GetUiTextSize(elemList []UI_Element, elemIdx UI_Idx) Vec2_F32 {
-	userData := elemList[elemIdx].UserData
-	t := GetGuiText(uint32(userData.Idx))
-	w, h := text.Measure(t, AppFontFace, 1.0)
-	return Vec2_F32{
-		X: float32(w),
-		Y: float32(h),
+func GetUiTextSize(size float32, lang uint8, textIdx uint16) (w, h float32) {
+	AppFontFace.Size = float64(size)
+	t := GetGuiText(textIdx, lang)
+	ww, hh := text.Measure(t, &AppFontFace, 1.0)
+	return float32(ww), float32(hh)
+}
+
+func initFontFace() {
+	fontReader := bytes.NewReader(fontdata)
+	faceSource, err := text.NewGoTextFaceSource(fontReader)
+	if err != nil {
+		panic(fmt.Sprintf("could not parse font data"))
 	}
+	AppFontFace.Source = faceSource
+	AppFontFace.Direction = text.DirectionLeftToRight
+	AppFontFace.Language = language.English
+	AppFontFace.Size = 14.0
 }
 
 var TEXT = [_textCount][_langCount]string{
@@ -95,10 +111,10 @@ var TEXT = [_textCount][_langCount]string{
 	},
 }
 
-var TEXT_USER_DATA = [_textCount]UI_UserData{
-	TEXT_LOGIN_ANON_BUTTON: UI_UserData{
-		Kind: USER_DATA_TEXT,
-		Idx:  uint16(TEXT_LOGIN_ANON_BUTTON),
-		Color: color.,
-	},
-}
+// var TEXT_USER_DATA = [_textCount]UI_UserData{
+// 	TEXT_LOGIN_ANON_BUTTON: UI_UserData{
+// 		Kind: USER_DATA_TEXT,
+// 		Idx:  uint16(TEXT_LOGIN_ANON_BUTTON),
+// 		Color: color.,
+// 	},
+// }

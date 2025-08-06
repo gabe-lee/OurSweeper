@@ -64,10 +64,12 @@ var sizeTable = [typeCount]uint32{
 }
 
 type paramHookups struct {
-	parentsStart  uint32
-	parentsEnd    uint32
-	childrenStart uint32
-	calculation   PIdx_Calc
+	parentsStart     uint32
+	calcOutputsStart uint32
+	childrenStart    uint32
+	parentsLen       uint8
+	calcOutputsLen   uint8
+	calculation      PIdx_Calc
 }
 
 type ParamTable struct {
@@ -75,6 +77,7 @@ type ParamTable struct {
 	hookups     []paramHookups
 	children    []uint16
 	parents     []uint16
+	outputs     []uint16
 	calcs       []ParamCalc
 	byteOffsets [typeCount]uint32
 	idxOffsets  [typeCount]uint16
@@ -125,11 +128,13 @@ For an example template that fulfills this requirement, see the function body of
 	calcsSlice := make([]ParamCalc, calcsCount)
 	childrenSlice := make([]uint16, 1)
 	parentsSlice := make([]uint16, 1)
+	calcOutputs := make([]uint16, 1)
 	return ParamTable{
 		values:      valuesSlice,
 		hookups:     hookupsSlice,
 		children:    childrenSlice,
 		parents:     parentsSlice,
+		outputs:     calcOutputs,
 		calcs:       calcsSlice,
 		byteOffsets: byteOffsets,
 		idxOffsets:  idxOffsets,
@@ -151,7 +156,7 @@ func (t *ParamTable) checkIdxType(idx uint16, name string, validType int, final 
 			}
 		}
 		if !canBeDerived {
-			if t.hookups[idx].parentsStart != 0 || t.hookups[idx].parentsEnd != 0 || t.hookups[idx].calculation != 0 {
+			if t.hookups[idx].parentsStart != 0 || t.hookups[idx].parentsLen != 0 || t.hookups[idx].calcOutputsStart != 0 || t.hookups[idx].calcOutputsLen != 0 {
 				panic(fmt.Sprintf("error: parameter table: index %d is a derived value (has parents and calculation func), cannot update directly", idx))
 			}
 		}
@@ -449,10 +454,22 @@ func (t *ParamTable) SetRoot_F64(idx PIdx_F64, val float64) {
 	t.set_F64(_idx, val, false, prev)
 }
 
-func (t *ParamTable) initChildrenOfParents(idx uint16, parents []uint16) {
+func (t *ParamTable) initDerivedHookups(idx uint16, calcIdx PIdx_Calc, parents []uint16, outputs []uint16) {
+	t.hookups[idx].calculation = calcIdx
 	t.hookups[idx].parentsStart = uint32(len(t.parents))
-	t.hookups[idx].parentsEnd = uint32(len(t.parents)) + uint32(len(parents))
+	t.hookups[idx].calcOutputsStart = uint32(len(t.outputs))
+	if EnableDebug {
+		if len(parents) > 255 {
+			panic(fmt.Sprintf("derived values can only have a maximum of 255 parents (calculation inputs), got parent len %d", len(parents)))
+		}
+		if len(outputs) > 255 {
+			panic(fmt.Sprintf("derived values can only have a maximum of 255 calculation outputs, got output len %d", len(outputs)))
+		}
+	}
+	t.hookups[idx].parentsLen = uint8(len(parents))
+	t.hookups[idx].calcOutputsLen = uint8(len(outputs))
 	t.parents = append(t.parents, parents...)
+	t.outputs = append(t.outputs, outputs...)
 nextParent:
 	for _, parent := range parents {
 		if t.hookups[parent].childrenStart == 0 {
@@ -478,6 +495,10 @@ nextParent:
 			}
 		}
 	}
+	calc := t.getCalc(calcIdx)
+	recalc := CalcInterface{table: t, inputs: parents, outputs: outputs}
+	calc(&recalc)
+	t.updateChildren(idx, []uint16{idx})
 }
 
 func (t *ParamTable) getCalc(calcIdx PIdx_Calc) ParamCalc {
@@ -501,125 +522,59 @@ func (t *ParamTable) RegisterCalc(calcIdx PIdx_Calc, calc ParamCalc) {
 	t.calcs[calcIdx] = calc
 }
 
-func (t *ParamTable) InitDerived_U8(idx PIdx_U8, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Uint8", typeU8, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_U8(idx PIdx_U8, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Uint8", typeU8, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_I8(idx PIdx_I8, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Int8", typeI8, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_I8(idx PIdx_I8, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Int8", typeI8, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_Bool(idx PIdx_Bool, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Bool", typeBool, true, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_Bool(idx PIdx_Bool, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Bool", typeBool, true, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_U16(idx PIdx_U16, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Uint16", typeU16, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_U16(idx PIdx_U16, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Uint16", typeU16, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_I16(idx PIdx_I16, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Int16", typeI16, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_I16(idx PIdx_I16, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Int16", typeI16, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_U32(idx PIdx_U32, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Uint32", typeU32, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_U32(idx PIdx_U32, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Uint32", typeU32, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_I32(idx PIdx_I32, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Int32", typeI32, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_I32(idx PIdx_I32, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Int32", typeI32, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_F32(idx PIdx_F32, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Float32", typeF32, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_F32(idx PIdx_F32, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Float32", typeF32, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_U64(idx PIdx_U64, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Uint64", typeU64, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_U64(idx PIdx_U64, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Uint64", typeU64, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_I64(idx PIdx_I64, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Int64", typeI64, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_I64(idx PIdx_I64, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Int64", typeI64, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
-func (t *ParamTable) InitDerived_F64(idx PIdx_F64, calcIdx PIdx_Calc, inputs []uint16) {
-	_idx := uint16(idx)
-	t.checkIdxType(_idx, "Float64", typeF64, false, true)
-	calc := t.getCalc(calcIdx)
-	t.hookups[idx].calculation = calcIdx
-	t.initChildrenOfParents(_idx, inputs)
-	recalc := CalcInterface{table: t, inputs: inputs, output: _idx}
-	calc(&recalc)
-	t.updateChildren(_idx, []uint16{_idx})
+func (t *ParamTable) InitDerived_F64(idx PIdx_F64, calcIdx PIdx_Calc, inputs []uint16, outputs []uint16) {
+	t.checkIdxType(uint16(idx), "Float64", typeF64, false, true)
+	t.initDerivedHookups(uint16(idx), calcIdx, inputs, outputs)
 }
 
 func (t *ParamTable) updateChildren(idx uint16, prevIdxs []uint16) (newPrevIdxs []uint16) {
@@ -643,7 +598,12 @@ func (t *ParamTable) updateChildren(idx uint16, prevIdxs []uint16) (newPrevIdxs 
 		}
 		hookup := t.hookups[childIdx]
 		calc := t.calcs[hookup.calculation]
-		recalc := CalcInterface{table: t, inputs: t.parents[hookup.parentsStart:hookup.parentsEnd], output: childIdx, prevIdxs: newPrevIdxs}
+		recalc := CalcInterface{
+			table:    t,
+			inputs:   t.parents[hookup.parentsStart : hookup.parentsStart+uint32(hookup.parentsLen)],
+			outputs:  t.outputs[hookup.calcOutputsStart : hookup.calcOutputsStart+uint32(hookup.calcOutputsLen)],
+			prevIdxs: newPrevIdxs,
+		}
 		calc(&recalc)
 		newPrevIdxs = recalc.prevIdxs
 		childIdxIdx += 1
@@ -658,8 +618,8 @@ func (t *ParamTable) updateChildren(idx uint16, prevIdxs []uint16) (newPrevIdxs 
 type CalcInterface struct {
 	table    *ParamTable
 	inputs   []uint16
+	outputs  []uint16
 	prevIdxs []uint16
-	output   uint16
 }
 
 func (t CalcInterface) GetInput_U8(inputIdx uint16) uint8 {
@@ -707,36 +667,47 @@ func (t CalcInterface) GetInput_F64(inputIdx uint16) float64 {
 	return t.table.Get_F64(PIdx_F64(idx))
 }
 
-func (t *CalcInterface) SetOutput_U8(val uint8) {
-	t.prevIdxs = t.table.set_U8(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_U8(outputIdx uint16, val uint8) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_U8(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_I8(val int8) {
-	t.prevIdxs = t.table.set_I8(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_I8(outputIdx uint16, val int8) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_I8(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_Bool(val bool) {
-	t.prevIdxs = t.table.set_Bool(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_Bool(outputIdx uint16, val bool) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_Bool(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_U16(val uint16) {
-	t.prevIdxs = t.table.set_U16(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_U16(outputIdx uint16, val uint16) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_U16(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_I16(val int16) {
-	t.prevIdxs = t.table.set_I16(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_I16(outputIdx uint16, val int16) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_I16(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_U32(val uint32) {
-	t.prevIdxs = t.table.set_U32(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_U32(outputIdx uint16, val uint32) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_U32(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_I32(val int32) {
-	t.prevIdxs = t.table.set_I32(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_I32(outputIdx uint16, val int32) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_I32(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_F32(val float32) {
-	t.prevIdxs = t.table.set_F32(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_F32(outputIdx uint16, val float32) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_F32(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_U64(val uint64) {
-	t.prevIdxs = t.table.set_U64(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_U64(outputIdx uint16, val uint64) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_U64(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_I64(val int64) {
-	t.prevIdxs = t.table.set_I64(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_I64(outputIdx uint16, val int64) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_I64(idx, val, true, t.prevIdxs)
 }
-func (t *CalcInterface) SetOutput_F64(val float64) {
-	t.prevIdxs = t.table.set_F64(t.output, val, true, t.prevIdxs)
+func (t *CalcInterface) SetOutput_F64(outputIdx uint16, val float64) {
+	idx := t.outputs[outputIdx]
+	t.prevIdxs = t.table.set_F64(idx, val, true, t.prevIdxs)
 }
