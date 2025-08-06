@@ -4,7 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"image"
-	"log"
+	"strings"
 
 	"github.com/gabe-lee/OurSweeper/coord"
 	"github.com/gabe-lee/OurSweeper/data_buffer"
@@ -19,6 +19,7 @@ import (
 	"github.com/gabe-lee/OurSweeper/xmath"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 type (
@@ -52,6 +53,7 @@ type GameClient struct {
 	UserStats          UserStats
 	AnonToken          []byte
 	ActiveServerWorlds ActiveWorldsReport
+	ParamTable         ParamTable
 }
 
 type Input struct {
@@ -66,32 +68,67 @@ type Input struct {
 
 // Draw implements ebiten.Game.
 func (g *GameClient) Draw(screen *EbitImage) {
-	for i := range C.WORLD_TILE_COUNT {
-		tilePos := coord.CoordFromIndex(i, C.TY_SHIFT, C.TX_MASK)
-		boardPos := tilePos.MultScalar(C.TILE_SIZE).DivScalar(C.DISPLAY_SCALE_DOWN)
-		iconIdx := g.World.Tiles[i]
-		iconTopLeft := C.BOARD_TILES[iconIdx]
-		iconBotRight := [2]int{iconTopLeft[0] + C.TILE_SIZE, iconTopLeft[1] + C.TILE_SIZE}
-		rect := image.Rect(iconTopLeft[0], iconTopLeft[1], iconBotRight[0], iconBotRight[1])
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Scale(0.5, 0.5)
-		op.GeoM.Translate(float64(boardPos.X), float64(boardPos.Y))
-		op.GeoM.Translate(g.BoardX, g.BoardY)
-		screen.DrawImage(g.Atlas.SubImage(rect).(*EbitImage), op)
+	// for i := range C.WORLD_TILE_COUNT {
+	// 	tilePos := coord.CoordFromIndex(i, C.TY_SHIFT, C.TX_MASK)
+	// 	boardPos := tilePos.MultScalar(C.TILE_SIZE).DivScalar(C.DISPLAY_SCALE_DOWN)
+	// 	iconIdx := g.World.Tiles[i]
+	// 	iconTopLeft := C.BOARD_TILES[iconIdx]
+	// 	iconBotRight := [2]int{iconTopLeft[0] + C.TILE_SIZE, iconTopLeft[1] + C.TILE_SIZE}
+	// 	rect := image.Rect(iconTopLeft[0], iconTopLeft[1], iconBotRight[0], iconBotRight[1])
+	// 	op := &ebiten.DrawImageOptions{}
+	// 	op.GeoM.Scale(0.5, 0.5)
+	// 	op.GeoM.Translate(float64(boardPos.X), float64(boardPos.Y))
+	// 	op.GeoM.Translate(g.BoardX, g.BoardY)
+	// 	screen.DrawImage(g.Atlas.SubImage(rect).(*EbitImage), op)
+	// }
+	loginX := g.ParamTable.Get_F32(LOGIN_WINDOW_X)
+	loginY := g.ParamTable.Get_F32(LOGIN_WINDOW_Y)
+	loginW := g.ParamTable.Get_F32(LOGIN_WINDOW_WIDTH)
+	loginH := g.ParamTable.Get_F32(LOGIN_WINDOW_HEIGHT)
+	iconTopLeft := C.BOARD_TILES[C.ICON_CODE_0]
+	iconBotRight := [2]int{iconTopLeft[0] + C.TILE_SIZE, iconTopLeft[1] + C.TILE_SIZE}
+	rect := image.Rect(iconTopLeft[0], iconTopLeft[1], iconBotRight[0], iconBotRight[1])
+	scaleX := loginW / float32(rect.Dx())
+	scaleY := loginH / float32(rect.Dy())
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(float64(scaleX), float64(scaleY))
+	op.GeoM.Translate(float64(loginX), float64(loginY))
+	screen.DrawImage(g.Atlas.SubImage(rect).(*EbitImage), op)
+	texOp := text.DrawOptions{}
+	texOp.GeoM.Scale(0.5, 0.5)
+	texOp.GeoM.Translate(float64(loginX+8.0), float64(loginY+8.0))
+	texOp.ColorScale.SetR(0)
+	texOp.ColorScale.SetG(0)
+	texOp.ColorScale.SetB(0)
+	texOp.LayoutOptions.LineSpacing = AppFontFace.Size * 1.1
+	texOp.Filter = ebiten.FilterLinear
+	weightTag := text.MustParseTag("wght")
+	AppFontFace.SetVariation(weightTag, 500.0)
+	t := strings.Builder{}
+	for _, str := range TEXT[TEXT_LOGIN_ANON_BUTTON] {
+		t.WriteString(str)
+		t.WriteByte('\n')
 	}
+	text.Draw(screen, t.String(), &AppFontFace, &texOp)
 }
 
 // Layout implements ebiten.Game.
 func (g *GameClient) Layout(outsideWidth int, outsideHeight int) (screenWidth int, screenHeight int) {
-	return outsideWidth, outsideHeight
+	screenScale := ebiten.Monitor().DeviceScaleFactor()
+	g.ParamTable.SetRoot_F32(WINDOW_WIDTH, float32(outsideWidth)*float32(screenScale))
+	g.ParamTable.SetRoot_F32(WINDOW_HEIGHT, float32(outsideHeight)*float32(screenScale))
+	return int(float64(outsideWidth) * screenScale), int(float64(outsideHeight) * screenScale)
 }
 
 func (g *GameClient) Init(clientToServer chan<- []byte, serverToClient <-chan []byte) {
 	img, _, err := image.Decode(bytes.NewReader(tilesPng))
-	if err != nil {
-		log.Fatal(err)
+	if g.Log.FatalIfErr(err, "failed to load atlas image") != 0 {
+		panic("")
 	}
 	g.Atlas = ebiten.NewImageFromImage(img)
+	InitParamTable(&g.ParamTable)
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	InitFontFace()
 }
 
 // Update implements ebiten.Game.

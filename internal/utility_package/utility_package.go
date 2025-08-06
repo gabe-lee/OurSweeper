@@ -10,7 +10,7 @@ type UtilityPackage struct {
 	WriteBufferPool *WriteBufferPool
 }
 
-func NewServerUtility() UtilityPackage {
+func NewUtilityPackage() UtilityPackage {
 	return UtilityPackage{
 		WriteBufferPool: data_buffer.NewWriteBufferPool(),
 	}

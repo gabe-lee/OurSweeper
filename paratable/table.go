@@ -122,6 +122,7 @@ For an example template that fulfills this requirement, see the function body of
 		typeI8:   (uint32(typeF64End) * 8) + (uint32(PIdx_F64(typeF32End)-typeF64End) * 4) + (uint32(PIdx_F32(typeI16End)-typeF32End) * 2) + uint32(PIdx_I16(typeU8End)-typeI16End),
 		typeBool: (uint32(typeF64End) * 8) + (uint32(PIdx_F64(typeF32End)-typeF64End) * 4) + (uint32(PIdx_F32(typeI16End)-typeF32End) * 2) + uint32(PIdx_I16(typeI8End)-typeI16End),
 	}
+	fmt.Printf("calcs len %d", calcsCount) //DEBUG
 	var valuesByteLen = byteOffsets[typeBool] + uint32(PIdx_I16(typeBoolEnd)-typeI16End)
 	valuesSlice := make([]byte, valuesByteLen)
 	hookupsSlice := make([]paramHookups, valuesIdxLen)
@@ -665,6 +666,18 @@ func (t CalcInterface) GetInput_I64(inputIdx uint16) int64 {
 func (t CalcInterface) GetInput_F64(inputIdx uint16) float64 {
 	idx := t.inputs[inputIdx]
 	return t.table.Get_F64(PIdx_F64(idx))
+}
+func (t CalcInterface) GetAllInputs() []uint16 {
+	return t.inputs
+}
+func (t CalcInterface) GetInputRangeStart(start uint16) []uint16 {
+	return t.inputs[start:]
+}
+func (t CalcInterface) GetInputRangeEnd(end uint16) []uint16 {
+	return t.inputs[:end]
+}
+func (t CalcInterface) GetInputRangeStartEnd(start, end uint16) []uint16 {
+	return t.inputs[start:end]
 }
 
 func (t *CalcInterface) SetOutput_U8(outputIdx uint16, val uint8) {

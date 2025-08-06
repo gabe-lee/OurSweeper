@@ -1,6 +1,8 @@
 package game_client
 
 import (
+	"math"
+
 	"github.com/gabe-lee/OurSweeper/paratable"
 )
 
@@ -43,14 +45,26 @@ const (
 )
 
 const (
-	WINDOW_WIDTH PIdx_I32 = PIdx_I32(iota + _U32_PARAMS_END)
-	WINDOW_HEIGHT
 	// ... more int32 param indexes
-	_I32_PARAMS_END
+	_I32_PARAMS_END = PIdx_I32(iota + _U32_PARAMS_END)
 )
 
 const (
-	_F32_PARAMS_END PIdx_F32 = PIdx_F32(iota + _I32_PARAMS_END)
+	F32_0_00 = PIdx_F32(iota + _I32_PARAMS_END)
+	F32_0_50
+	WINDOW_WIDTH
+	WINDOW_HEIGHT
+	WINDOW_CENTER_X
+	WINDOW_CENTER_Y
+	LOGIN_WINDOW_WIDTH
+	LOGIN_WINDOW_HEIGHT
+	LOGIN_WINDOW_NUM_ROWS
+	LOGIN_WINDOW_WIDEST_ROW
+	LOGIN_WINDOW_PADDING
+	LOGIN_WINDOW_ROW_HEIGHT_SUM
+	LOGIN_WINDOW_X
+	LOGIN_WINDOW_Y
+	_F32_PARAMS_END
 	// ... more float32 param indexes
 )
 
@@ -85,29 +99,70 @@ const (
 )
 
 const (
-	_CALC_INVALID PIdx_Calc = PIdx_Calc(iota) // recommended to leave idx 0 as a nil func for debug purposes
-	_CALC_CENTER_OF_RECT
-	_CALC_CENTER_OF_WINDOW
+	_CALC_LERP_F32 = PIdx_Calc(iota)
+	_CALC_MAX_F32
+	_CALC_MIN_F32
+	_CALC_SUM_F32
+	_CALC_SUM_PLUS_MARGINS_F32
 	_CALC_TEXT_SIZE
+	_CALC_CENTER_LINE_AROUND_POINT
 	// ... more calculation indexes
 	_CALC_COUNT
 )
 
 const (
-	_INPUT_CENTER_OF_WINDOW_WIDTH uint16 = iota
-	_INPUT_CENTER_OF_WINDOW_HEIGHT
+	_IN_CENTER_LINE_AROUND_POINT_CEN uint16 = iota
+	_IN_CENTER_LINE_AROUND_POINT_LEN
+)
+const (
+	_OUT_CENTER_LINE_AROUND_POINT_VAL uint16 = iota
+)
+
+var _INS_CENTER_LOGIN_PANEL_X_POS = [...]uint16{
+	_IN_CENTER_LINE_AROUND_POINT_CEN: uint16(WINDOW_CENTER_X),
+	_IN_CENTER_LINE_AROUND_POINT_LEN: uint16(LOGIN_WINDOW_WIDTH),
+}
+var _OUTS_CENTER_LOGIN_PANEL_X_POS = [...]uint16{
+	_OUT_CENTER_LINE_AROUND_POINT_VAL: uint16(LOGIN_WINDOW_X),
+}
+var _INS_CENTER_LOGIN_PANEL_Y_POS = [...]uint16{
+	_IN_CENTER_LINE_AROUND_POINT_CEN: uint16(WINDOW_CENTER_Y),
+	_IN_CENTER_LINE_AROUND_POINT_LEN: uint16(LOGIN_WINDOW_HEIGHT),
+}
+var _OUTS_CENTER_LOGIN_PANEL_Y_POS = [...]uint16{
+	_OUT_CENTER_LINE_AROUND_POINT_VAL: uint16(LOGIN_WINDOW_Y),
+}
+
+const (
+	_IN_SUM_PLUS_MARGINS_F32_MARGIN uint16 = iota
+	_IN_SUM_PLUS_MARGINS_F32_FIRST_VAL
 )
 
 const (
-	_INPUT_CENTER_OF_RECT_TOP_LEFT uint16 = iota
-	_INPUT_CENTER_OF_RECT_TOP_RIGHT
-	_INPUT_CENTER_OF_RECT_BOT_LEFT
-	_INPUT_CENTER_OF_RECT_BOT_RIGHT
+	_IN_LERP_F32_A uint16 = iota
+	_IN_LERP_F32_B
+	_IN_LERP_F32_DELTA
+)
+const (
+	_OUT_LERP_F32 uint16 = iota
 )
 
-var _CENTER_OF_WINDOW_INPUTS = [...]uint16{
-	_INPUT_CENTER_OF_WINDOW_WIDTH:  uint16(WINDOW_WIDTH),
-	_INPUT_CENTER_OF_WINDOW_HEIGHT: uint16(WINDOW_HEIGHT),
+var _INS_WINDOW_CENTER_X = [...]uint16{
+	_IN_LERP_F32_A:     uint16(F32_0_00),
+	_IN_LERP_F32_B:     uint16(WINDOW_WIDTH),
+	_IN_LERP_F32_DELTA: uint16(F32_0_50),
+}
+var _OUTS_WINDOW_CENTER_X = [...]uint16{
+	_OUT_LERP_F32: uint16(WINDOW_CENTER_X),
+}
+
+var _INS_WINDOW_CENTER_Y = [...]uint16{
+	_IN_LERP_F32_A:     uint16(F32_0_00),
+	_IN_LERP_F32_B:     uint16(WINDOW_HEIGHT),
+	_IN_LERP_F32_DELTA: uint16(F32_0_50),
+}
+var _OUTS_WINDOW_CENTER_Y = [...]uint16{
+	_OUT_LERP_F32: uint16(WINDOW_CENTER_Y),
 }
 
 const (
@@ -116,20 +171,76 @@ const (
 	_IN_TEXT_SIZE_STRING
 )
 
-var MyParamTable = paratable.NewParamTable(_U64_PARAMS_END, _I64_PARAMS_END, _F64_PARAMS_END, _U32_PARAMS_END, _I32_PARAMS_END, _F32_PARAMS_END, _U16_PARAMS_END, _I16_PARAMS_END, _U8_PARAMS_END, _I8_PARAMS_END, _BOOL_PARAMS_END, _CALC_COUNT)
+const (
+	_OUT_TEXT_SIZE_X uint16 = iota
+	_OUT_TEXT_SIZE_Y
+)
 
-func InitMyParamTable() {
+func InitParamTable(table *ParamTable) {
+	*table = paratable.NewParamTable(_U64_PARAMS_END, _I64_PARAMS_END, _F64_PARAMS_END, _U32_PARAMS_END, _I32_PARAMS_END, _F32_PARAMS_END, _U16_PARAMS_END, _I16_PARAMS_END, _U8_PARAMS_END, _I8_PARAMS_END, _BOOL_PARAMS_END, _CALC_COUNT)
 	// Register all calculations first
-	MyParamTable.RegisterCalc(_CALC_TEXT_SIZE, func(t *CalcInterface) {
+	table.RegisterCalc(_CALC_TEXT_SIZE, func(t *CalcInterface) {
 		size := t.GetInput_F32(_IN_TEXT_SIZE_SIZE)
 		lang := t.GetInput_U8(_IN_TEXT_SIZE_LANG)
 		textIdx := t.GetInput_U16(_IN_TEXT_SIZE_STRING)
 		w, h := GetUiTextSize(size, lang, textIdx)
-		t.SetOutput_F32(val3)
+		t.SetOutput_F32(_OUT_TEXT_SIZE_X, w)
+		t.SetOutput_F32(_OUT_TEXT_SIZE_Y, h)
+	})
+	table.RegisterCalc(_CALC_LERP_F32, func(t *CalcInterface) {
+		a := t.GetInput_F32(_IN_LERP_F32_A)
+		b := t.GetInput_F32(_IN_LERP_F32_B)
+		delta := t.GetInput_F32(_IN_LERP_F32_DELTA)
+		val := a + ((b - a) * delta)
+		t.SetOutput_F32(_OUT_LERP_F32, val)
+	})
+	table.RegisterCalc(_CALC_MAX_F32, func(t *CalcInterface) {
+		var val float32 = -math.MaxFloat32
+		for _, idx := range t.GetAllInputs() {
+			val = max(val, t.GetInput_F32(idx))
+		}
+		t.SetOutput_F32(0, val)
+	})
+	table.RegisterCalc(_CALC_MIN_F32, func(t *CalcInterface) {
+		var val float32 = math.MaxFloat32
+		for _, idx := range t.GetAllInputs() {
+			val = min(val, t.GetInput_F32(idx))
+		}
+		t.SetOutput_F32(0, val)
+	})
+	table.RegisterCalc(_CALC_SUM_F32, func(t *CalcInterface) {
+		var val float32 = 0
+		for _, idx := range t.GetAllInputs() {
+			val += t.GetInput_F32(idx)
+		}
+		t.SetOutput_F32(0, val)
+	})
+	table.RegisterCalc(_CALC_SUM_PLUS_MARGINS_F32, func(t *CalcInterface) {
+		margin := t.GetInput_F32(_IN_SUM_PLUS_MARGINS_F32_MARGIN)
+		var val float32 = margin
+		for _, idx := range t.GetInputRangeStart(_IN_SUM_PLUS_MARGINS_F32_FIRST_VAL) {
+			val += margin
+			val += t.GetInput_F32(idx)
+		}
+		t.SetOutput_F32(0, val)
+	})
+	table.RegisterCalc(_CALC_CENTER_LINE_AROUND_POINT, func(t *CalcInterface) {
+		cen := t.GetInput_F32(_IN_CENTER_LINE_AROUND_POINT_CEN)
+		length := t.GetInput_F32(_IN_CENTER_LINE_AROUND_POINT_LEN)
+		halfLen := length / 2.0
+		val := cen - halfLen
+		t.SetOutput_F32(0, val)
 	})
 	// Init root values
-	MyParamTable.SetRoot_U64(FIRST_U64_PARAM, 1)
-	MyParamTable.SetRoot_I64(FIRST_I64_PARAM, -2)
+	table.SetRoot_F32(F32_0_00, 0.0)
+	table.SetRoot_F32(F32_0_50, 0.5)
+	table.SetRoot_F32(WINDOW_WIDTH, 800.0)
+	table.SetRoot_F32(WINDOW_HEIGHT, 600.0)
+	table.SetRoot_F32(LOGIN_WINDOW_WIDTH, 400.0)
+	table.SetRoot_F32(LOGIN_WINDOW_HEIGHT, 300.0)
 	// Init derived values
-	MyParamTable.InitDerived_I32(FIRST_I32_PARAM, _FIRST_CALC, _FIRST_CALC_1[:])
+	table.InitDerived_F32(WINDOW_CENTER_X, _CALC_LERP_F32, _INS_WINDOW_CENTER_X[:], _OUTS_WINDOW_CENTER_X[:])
+	table.InitDerived_F32(WINDOW_CENTER_Y, _CALC_LERP_F32, _INS_WINDOW_CENTER_Y[:], _OUTS_WINDOW_CENTER_Y[:])
+	table.InitDerived_F32(LOGIN_WINDOW_X, _CALC_CENTER_LINE_AROUND_POINT, _INS_CENTER_LOGIN_PANEL_X_POS[:], _OUTS_CENTER_LOGIN_PANEL_X_POS[:])
+	table.InitDerived_F32(LOGIN_WINDOW_Y, _CALC_CENTER_LINE_AROUND_POINT, _INS_CENTER_LOGIN_PANEL_Y_POS[:], _OUTS_CENTER_LOGIN_PANEL_Y_POS[:])
 }

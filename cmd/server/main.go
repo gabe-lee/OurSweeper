@@ -30,7 +30,7 @@ func main() {
 		uuid.EnableRandPool()
 	}
 	// shutdownSig, shutdown := context.WithCancel(context.Background())
-	utility := utility_package.NewServerUtility()
+	utility := utility_package.NewUtilityPackage()
 	server := Server{
 		Logger: logger.NewLogger(logDir, masterDir, os.Stdout, &utility),
 		Utils:  utility,

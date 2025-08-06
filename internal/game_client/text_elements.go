@@ -3,14 +3,13 @@ package game_client
 import (
 	"bytes"
 	_ "embed"
-	"fmt"
 	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"golang.org/x/text/language"
 )
 
-// go:embed space_grotesk.ttf
+//go:embed space_grotesk.ttf
 var fontdata []byte
 
 const (
@@ -77,20 +76,20 @@ func GetGuiText(textIdx uint16, lang uint8) string {
 func GetUiTextSize(size float32, lang uint8, textIdx uint16) (w, h float32) {
 	AppFontFace.Size = float64(size)
 	t := GetGuiText(textIdx, lang)
-	ww, hh := text.Measure(t, &AppFontFace, 1.0)
+	ww, hh := text.Measure(t, &AppFontFace, float64(size)*1.2)
 	return float32(ww), float32(hh)
 }
 
-func initFontFace() {
+func InitFontFace() {
 	fontReader := bytes.NewReader(fontdata)
 	faceSource, err := text.NewGoTextFaceSource(fontReader)
 	if err != nil {
-		panic(fmt.Sprintf("could not parse font data"))
+		panic("could not parse font data")
 	}
 	AppFontFace.Source = faceSource
 	AppFontFace.Direction = text.DirectionLeftToRight
 	AppFontFace.Language = language.English
-	AppFontFace.Size = 14.0
+	AppFontFace.Size = 40.0
 }
 
 var TEXT = [_textCount][_langCount]string{
